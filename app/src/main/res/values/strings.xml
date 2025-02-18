@@ -1,0 +1,48 @@
+<resources>
+    <string name="app_name">URL Player Beta</string>
+    <string name="back_button">Back</string>
+    <string name="add_url">Add URL</string>
+    <string name="title">Title</string>
+    <string name="url">URL</string>
+    <string name="user_agent">User Agent</string>
+    <string name="optional">Optional</string>
+    <string name="save">SAVE</string>
+
+    <!-- Error Messages -->
+    <string name="error_title_required">Title is required</string>
+    <string name="error_title_too_short">Title must be at least 3 characters</string>
+    <string name="error_title_exists">A channel with this title already exists</string>
+    <string name="error_url_required">URL is required</string>
+    <string name="error_invalid_url">Please enter a valid streaming URL (HLS, RTMP, RTSP, HTTP, etc.)</string>
+    <string name="error_saving_channel">Error saving channel</string>
+
+    <!-- Success Messages -->
+    <string name="success_channel_saved">Channel saved successfully</string>
+
+    <!-- URL Types -->
+    <string name="url_type_hls">HLS Stream</string>
+    <string name="url_type_rtmp">RTMP Stream</string>
+    <string name="url_type_rtsp">RTSP Stream</string>
+    <string name="url_type_http">HTTP Stream</string>
+    <string name="url_type_mp4">MP4 Video</string>
+    <string name="url_type_udp">UDP Stream</string>
+    <string name="url_type_rtp">RTP Stream</string>
+    <string name="url_type_mms">MMS Stream</string>
+    <string name="url_type_ts">Transport Stream</string>
+    <string name="url_type_srt">SRT Stream</string>
+
+    <!-- Update Activity -->
+    <string name="update_channel">Update Channel</string>
+    <string name="delete_channel">Delete Channel</string>
+    <string name="delete_channel_confirmation">Are you sure you want to delete this channel?</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    
+    <!-- Success Messages -->
+    <string name="success_channel_updated">Channel updated successfully</string>
+    <string name="success_channel_deleted">Channel deleted successfully</string>
+    
+    <!-- Error Messages -->
+    <string name="error_updating_channel">Error updating channel</string>
+    <string name="error_deleting_channel">Error deleting channel</string>
+</resources>
