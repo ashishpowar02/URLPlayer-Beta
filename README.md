@@ -38,7 +38,13 @@ URL Player Beta is an Android application that allows users to play online video
 - MMS
 - SRT
 
-## 📸 Screenshots  
+## 📸 Screenshots 
+
+<table align="center" style="width:100%; text-align:center; border-collapse:collapse;">  
+  <tr>  
+    <td><img src="image/01.png" alt="Screenshot 01" width="250px"></td>  
+  </tr>
+</table>
 
 <table align="center" style="width:100%; text-align:center; border-collapse:collapse;">  
   <tr>  
