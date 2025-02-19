@@ -2,7 +2,9 @@ package com.samyak.urlplayerbeta
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -13,6 +15,7 @@ import com.samyak.urlplayerbeta.models.Videos
 import com.samyak.urlplayerbeta.screen.PlayerActivity
 import com.samyak.urlplayerbeta.screen.URLActivity
 import com.samyak.urlplayerbeta.screen.UpdateActivity
+import com.samyak.urlplayerbeta.utils.ChannelItemDecoration
 
 class MainActivity : AppCompatActivity() {
     private lateinit var adapter: ChannelAdapter
@@ -38,10 +41,14 @@ class MainActivity : AppCompatActivity() {
 
         // Initialize RecyclerView
         recyclerView = findViewById(R.id.recycler_view)
-        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            addItemDecoration(ChannelItemDecoration(resources.getDimensionPixelSize(R.dimen.item_spacing)))
+            setHasFixedSize(true)
+        }
         channelList = mutableListOf()
         
-        // Initialize adapter with both click listeners
+        // Initialize adapter with all required callbacks
         adapter = ChannelAdapter(
             onPlayClick = { video ->
                 Intent(this, PlayerActivity::class.java).apply {
@@ -57,6 +64,9 @@ class MainActivity : AppCompatActivity() {
                     putExtra("USER_AGENT", video.userAgent)
                     startActivityForResult(this, UPDATE_REQUEST_CODE)
                 }
+            },
+            onError = { message ->
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
             }
         )
         recyclerView.adapter = adapter
@@ -78,18 +88,43 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadSavedChannels() {
-        val sharedPreferences = getSharedPreferences("M3U8Links", MODE_PRIVATE)
-        val links = sharedPreferences.getStringSet("links", mutableSetOf()) ?: mutableSetOf()
-        
-        channelList.clear()
-        links.forEach { link ->
-            link.split("###").let { parts ->
-                if (parts.size == 2) {
-                    channelList.add(Videos(parts[0], parts[1]))
+        try {
+            val sharedPreferences = getSharedPreferences("M3U8Links", MODE_PRIVATE)
+            val links = sharedPreferences.getStringSet("links", mutableSetOf()) ?: mutableSetOf()
+            
+            channelList.clear()
+            links.forEach { link ->
+                link.split("###").let { parts ->
+                    when (parts.size) {
+                        2 -> channelList.add(Videos(parts[0], parts[1], ""))
+                        3 -> channelList.add(Videos(parts[0], parts[1], parts[2]))
+                    }
                 }
             }
+            
+            // Sort channels by name
+            channelList.sortBy { it.name }
+            
+            // Update adapter with new list
+            adapter.updateItems(channelList)
+            
+            // Show empty state if needed
+            updateEmptyState()
+        } catch (e: Exception) {
+//            Toast.makeText(this, getString(R.string.error_loading_channels), Toast.LENGTH_SHORT).show()
         }
-        adapter.updateItems(channelList)
+    }
+
+    private fun updateEmptyState() {
+        if (channelList.isEmpty()) {
+            // Show empty state view
+            findViewById<View>(R.id.empty_state_view)?.visibility = View.VISIBLE
+            recyclerView.visibility = View.GONE
+        } else {
+            // Show recycler view
+            findViewById<View>(R.id.empty_state_view)?.visibility = View.GONE
+            recyclerView.visibility = View.VISIBLE
+        }
     }
 
     override fun onResume() {

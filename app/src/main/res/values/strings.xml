@@ -15,9 +15,22 @@
     <string name="error_url_required">URL is required</string>
     <string name="error_invalid_url">Please enter a valid streaming URL (HLS, RTMP, RTSP, HTTP, etc.)</string>
     <string name="error_saving_channel">Error saving channel</string>
+    <string name="error_loading_channels">Error loading channels</string>
+    <string name="error_invalid_position">Invalid channel position</string>
+    <string name="error_channel_not_found">Channel not found</string>
+    <string name="error_updating_list">Error updating channel list</string>
+    <string name="error_removing_channel">Error removing channel</string>
+    <string name="error_adding_channel">Error adding channel</string>
+    <string name="error_updating_channel">Error updating channel</string>
+    <string name="error_deleting_channel">Error deleting channel</string>
 
     <!-- Success Messages -->
     <string name="success_channel_saved">Channel saved successfully</string>
+    <string name="success_channel_updated">Channel updated successfully</string>
+    <string name="success_channel_deleted">Channel deleted successfully</string>
+    <string name="success_channel_removed">Channel removed successfully</string>
+    <string name="success_channel_added">Channel added successfully</string>
+    <string name="success_list_updated">Channel list updated</string>
 
     <!-- URL Types -->
     <string name="url_type_hls">HLS Stream</string>
@@ -37,12 +50,10 @@
     <string name="delete_channel_confirmation">Are you sure you want to delete this channel?</string>
     <string name="delete">Delete</string>
     <string name="cancel">Cancel</string>
-    
-    <!-- Success Messages -->
-    <string name="success_channel_updated">Channel updated successfully</string>
-    <string name="success_channel_deleted">Channel deleted successfully</string>
-    
-    <!-- Error Messages -->
-    <string name="error_updating_channel">Error updating channel</string>
-    <string name="error_deleting_channel">Error deleting channel</string>
+
+    <!-- Empty State -->
+    <string name="empty_channels_message">No channels added yet.\nTap + to add your first channel.</string>
+
+    <!-- New string for empty state icon -->
+    <string name="empty_state_icon">Empty state icon</string>
 </resources>

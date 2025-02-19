@@ -5,58 +5,147 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.samyak.urlplayerbeta.databinding.ItemChannelsBinding
 import com.samyak.urlplayerbeta.models.Videos
+import com.samyak.urlplayerbeta.utils.ChannelState
 
 class ChannelAdapter(
     private val onPlayClick: (Videos) -> Unit,
-    private val onEditClick: (Videos) -> Unit
+    private val onEditClick: (Videos) -> Unit,
+    private val onError: (String) -> Unit
 ) : RecyclerView.Adapter<ChannelAdapter.ChannelViewHolder>() {
 
     private val items = mutableListOf<Videos>()
+    private var currentState: ChannelState = ChannelState.Loading
 
     inner class ChannelViewHolder(private val binding: ItemChannelsBinding) : 
         RecyclerView.ViewHolder(binding.root) {
 
         fun bind(item: Videos) {
-            binding.tvChannelName.text = item.name
-            binding.tvChannelLink.text = item.url
+            try {
+                with(binding) {
+                    // Set text views with null checks
+                    tvChannelName.text = item.name.orEmpty()
+                    tvChannelLink.text = item.url.orEmpty()
 
-            binding.editButton.setOnClickListener {
-                if (adapterPosition != RecyclerView.NO_POSITION) {
-                    onEditClick(item)
-                }
-            }
+                    // Edit button click with position validation
+                    editButton.setOnClickListener {
+                        handleClick(bindingAdapterPosition) { position ->
+                            onEditClick(items[position])
+                        }
+                    }
 
-            binding.root.setOnClickListener {
-                if (adapterPosition != RecyclerView.NO_POSITION) {
-                    onPlayClick(item)
+                    // Play click (root item click) with position validation
+                    root.setOnClickListener {
+                        handleClick(bindingAdapterPosition) { position ->
+                            onPlayClick(items[position])
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                handleError("Error binding channel: ${e.message}")
             }
         }
     }
 
+    private fun handleClick(position: Int, action: (Int) -> Unit) {
+        if (position != RecyclerView.NO_POSITION && position < items.size) {
+            action(position)
+        } else {
+            handleError("Invalid channel position")
+        }
+    }
+
+    private fun handleError(message: String) {
+        currentState = ChannelState.Error(message)
+        onError(message)
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelViewHolder {
-        val inflater = LayoutInflater.from(parent.context)
-        val binding = ItemChannelsBinding.inflate(inflater, parent, false)
-        return ChannelViewHolder(binding)
+        return try {
+            val binding = ItemChannelsBinding.inflate(
+                LayoutInflater.from(parent.context), 
+                parent, 
+                false
+            )
+            ChannelViewHolder(binding)
+        } catch (e: Exception) {
+            handleError("Error creating view holder: ${e.message}")
+            throw e
+        }
     }
 
     override fun onBindViewHolder(holder: ChannelViewHolder, position: Int) {
-        holder.bind(items[position])
+        try {
+            if (position in items.indices) {
+                holder.bind(items[position])
+            } else {
+                handleError("Invalid position: $position")
+            }
+        } catch (e: Exception) {
+            handleError("Error binding view holder: ${e.message}")
+        }
     }
 
     override fun getItemCount() = items.size
 
     fun addItem(newItem: Videos) {
-        items.add(newItem)
-        notifyItemInserted(items.lastIndex)
+        try {
+            items.add(newItem)
+            notifyItemInserted(items.lastIndex)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun updateItems(newItems: List<Videos>) {
-        items.clear()
-        items.addAll(newItems)
-        notifyDataSetChanged()
+        try {
+            if (newItems.isEmpty()) {
+                items.clear()
+                notifyDataSetChanged()
+                return
+            }
+
+            val diffCallback = ChannelDiffCallback(items, newItems)
+            val diffResult = DiffUtil.calculateDiff(diffCallback)
+            
+            items.clear()
+            items.addAll(newItems)
+            
+            diffResult.dispatchUpdatesTo(this)
+            currentState = ChannelState.Success("Channel list updated")
+        } catch (e: Exception) {
+            handleError("Error updating channels: ${e.message}")
+        }
+    }
+
+    fun removeItem(position: Int) {
+        try {
+            if (position in 0 until items.size) {
+                items.removeAt(position)
+                notifyItemRemoved(position)
+                notifyItemRangeChanged(position, items.size)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private class ChannelDiffCallback(
+        private val oldList: List<Videos>,
+        private val newList: List<Videos>
+    ) : DiffUtil.Callback() {
+        override fun getOldListSize() = oldList.size
+        override fun getNewListSize() = newList.size
+        
+        override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean {
+            return oldList[oldPos].name == newList[newPos].name
+        }
+        
+        override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean {
+            return oldList[oldPos] == newList[newPos]
+        }
     }
 } 
