@@ -38,7 +38,14 @@ URL Player Beta is an Android application that allows users to play online video
 - MMS
 - SRT
 
-## 📸 Screenshots  
+## 📸 Screenshots 
+
+<table align="center" style="width:100%; text-align:center; border-collapse:collapse;">  
+  <tr>  
+    <td><img src="image/01.png" alt="Screenshot 01" width="250px"></td>  
+  </tr>
+  
+</table>
 
 <table align="center" style="width:100%; text-align:center; border-collapse:collapse;">  
   <tr>  
@@ -70,7 +77,7 @@ URL Player Beta is an Android application that allows users to play online video
 - Gradle 7.0 or higher
 
 ### Steps
-1. Clone the repository: https://github.com/samyak2403/URLPlayer-Beta.git
+1. Clone the repository:```sh https://github.com/samyak2403/URLPlayer-Beta.git ```
 
 2. Open the project in Android Studio
 
