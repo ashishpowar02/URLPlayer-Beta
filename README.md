@@ -1,5 +1,10 @@
 # URL Player Beta
 
+<div align="center">  
+  <img src="https://github.com/samyak2403/URLPlayer-Beta/blob/master/image/URLPlayer-Beta.png" alt="Sportsmine Logo" width="120"/>  
+  <h3>Your Ultimate URL Player Beta</h3>  
+</div>  
+
 URL Player Beta is an Android application that allows users to play online videos from various streaming sources. The app supports multiple video formats and streaming protocols.
 
 ## Features
@@ -42,9 +47,9 @@ URL Player Beta is an Android application that allows users to play online video
     <td><img src="image/3.png" alt="Screenshot 3" width="250px"></td>  
   </tr>  
   <tr>  
-    <td colspan="3"><img src="image/5.png" alt="Screenshot 5" width="250px"></td>  
-     <td colspan="3"><img src="image/4.png" alt="Screenshot 4" width="250px"></td> 
-     <td colspan="3"><img src="image/4.png" alt="Screenshot 6" width="250px"></td>  
+    <td><img src="image/5.png" alt="Screenshot 5" width="250px"></td>  
+     <td><img src="image/4.png" alt="Screenshot 4" width="250px"></td> 
+     <td><img src="image/6.png" alt="Screenshot 6" width="250px"></td>  
   </tr>  
 </table>  
 
@@ -95,9 +100,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contact
 
-Your Name - [@yourtwitter](https://twitter.com/yourtwitter)
+ - [@samyak](mailto:arrowwouldpro@gmail.com)
 
-Project Link: [https://github.com/yourusername/URLPlayerBeta](https://github.com/yourusername/URLPlayerBeta)
+Project Link: [https://github.com/yourusername/URLPlayerBeta](https://github.com/samyak2403/URLPlayerBeta)
 
 ## Acknowledgments
 
