@@ -13,7 +13,7 @@
     <string name="error_title_too_short">Title must be at least 3 characters</string>
     <string name="error_title_exists">A channel with this title already exists</string>
     <string name="error_url_required">URL is required</string>
-    <string name="error_invalid_url">Please enter a valid streaming URL (HLS, RTMP, RTSP, HTTP, etc.)</string>
+    <string name="error_invalid_url">Please enter a valid streaming URL (HLS, MP4, AVI, MKV, RTMP, RTSP, etc.)</string>
     <string name="error_saving_channel">Error saving channel</string>
     <string name="error_loading_channels">Error loading channels</string>
     <string name="error_invalid_position">Invalid channel position</string>
@@ -23,6 +23,9 @@
     <string name="error_adding_channel">Error adding channel</string>
     <string name="error_updating_channel">Error updating channel</string>
     <string name="error_deleting_channel">Error deleting channel</string>
+    <string name="error_playback">Error playing video</string>
+    <string name="error_cleartext_traffic">HTTP security error. Please use HTTPS URLs or contact support.</string>
+    <string name="error_network">Network error. Please check your connection.</string>
 
     <!-- Success Messages -->
     <string name="success_channel_saved">Channel saved successfully</string>

@@ -1,5 +1,6 @@
 package com.samyak.urlplayerbeta.screen
 
+import android.net.Uri
 import android.os.Bundle
 import android.util.Patterns
 import android.widget.EditText
@@ -18,19 +19,26 @@ class URLActivity : AppCompatActivity() {
     private lateinit var urlLayout: TextInputLayout
 
     companion object {
-        private val SUPPORTED_URL_PATTERNS = listOf(
+        private val SUPPORTED_VIDEO_EXTENSIONS = listOf(
             ".m3u8",  // HLS streams
+            ".mp4",   // MP4 videos
+            ".avi",   // AVI videos
+            ".mkv",   // MKV videos
             ".m3u",   // Playlist format
-            "rtmp://", // RTMP streams
-            "rtsp://", // RTSP streams
-            ".mp4",   // Direct video files
-            "http://",// HTTP streams
-            "https://", // HTTPS streams
-            "udp://", // UDP streams
-            "rtp://", // RTP streams
-            "mms://", // MMS streams
-            "ts",     // Transport streams
-            "srt://"  // SRT streams
+            ".ts",    // Transport streams
+            ".mov",   // QuickTime videos
+            ".webm"   // WebM videos
+        )
+
+        private val SUPPORTED_PROTOCOLS = listOf(
+            "http://",  // HTTP
+            "https://", // HTTPS
+            "rtmp://",  // RTMP
+            "rtsp://",  // RTSP
+            "udp://",   // UDP
+            "rtp://",   // RTP
+            "mms://",   // MMS
+            "srt://"    // SRT
         )
     }
 
@@ -99,29 +107,66 @@ class URLActivity : AppCompatActivity() {
             urlLayout.error = getString(R.string.error_url_required)
             isValid = false
         } else if (!isValidStreamUrl(url)) {
-            urlLayout.error = getString(R.string.error_invalid_url)
+            showUrlError()
             isValid = false
         }
 
         return isValid
     }
 
+    /**
+     * Validate whether a string is a valid URL.
+     */
+    private fun isValidUrl(url: String): Boolean {
+        return SUPPORTED_PROTOCOLS.any { protocol ->
+            url.lowercase().startsWith(protocol)
+        }
+    }
+
+    /**
+     * Validate whether a string is a valid stream URL.
+     */
     private fun isValidStreamUrl(url: String): Boolean {
-        // First check if it's a valid URL format
-        if (!Patterns.WEB_URL.matcher(url).matches() && 
-            !url.startsWith("rtmp://") && 
-            !url.startsWith("rtsp://") &&
-            !url.startsWith("udp://") &&
-            !url.startsWith("rtp://") &&
-            !url.startsWith("mms://") &&
-            !url.startsWith("srt://")) {
-            return false
+        if (!isValidUrl(url)) return false
+
+        val lowercaseUrl = url.lowercase()
+        
+        // Check for supported file extensions
+        if (SUPPORTED_VIDEO_EXTENSIONS.any { ext -> lowercaseUrl.endsWith(ext) }) {
+            return true
         }
 
-        // Check if URL contains any of the supported patterns
-        return SUPPORTED_URL_PATTERNS.any { pattern ->
-            url.lowercase().contains(pattern.lowercase())
+        // Check for streaming keywords in the URL
+        return lowercaseUrl.contains("stream") || 
+               lowercaseUrl.contains("live") || 
+               lowercaseUrl.contains("video") ||
+               lowercaseUrl.contains("play")
+    }
+
+    private fun detectUrlType(url: String): String {
+        val lowercaseUrl = url.lowercase()
+        return when {
+            lowercaseUrl.endsWith(".m3u8") -> "HLS"
+            lowercaseUrl.endsWith(".mp4") -> "MP4"
+            lowercaseUrl.endsWith(".avi") -> "AVI"
+            lowercaseUrl.endsWith(".mkv") -> "MKV"
+            lowercaseUrl.endsWith(".m3u") -> "M3U"
+            lowercaseUrl.endsWith(".ts") -> "TS"
+            lowercaseUrl.endsWith(".mov") -> "MOV"
+            lowercaseUrl.endsWith(".webm") -> "WEBM"
+            lowercaseUrl.startsWith("rtmp://") -> "RTMP"
+            lowercaseUrl.startsWith("rtsp://") -> "RTSP"
+            lowercaseUrl.startsWith("udp://") -> "UDP"
+            lowercaseUrl.startsWith("rtp://") -> "RTP"
+            lowercaseUrl.startsWith("mms://") -> "MMS"
+            lowercaseUrl.startsWith("srt://") -> "SRT"
+            else -> "HTTP"
         }
+    }
+
+    private fun showUrlError() {
+        urlLayout.error = getString(R.string.error_invalid_url)
+        urlLayout.isErrorEnabled = true
     }
 
     private fun saveChannelDetails() {
@@ -154,22 +199,6 @@ class URLActivity : AppCompatActivity() {
             showSuccessAndFinish()
         } catch (e: Exception) {
             showError(e.message ?: getString(R.string.error_saving_channel))
-        }
-    }
-
-    private fun detectUrlType(url: String): String {
-        return when {
-            url.contains(".m3u8") -> "HLS"
-            url.contains(".m3u") -> "M3U"
-            url.startsWith("rtmp://") -> "RTMP"
-            url.startsWith("rtsp://") -> "RTSP"
-            url.contains(".mp4") -> "MP4"
-            url.startsWith("udp://") -> "UDP"
-            url.startsWith("rtp://") -> "RTP"
-            url.startsWith("mms://") -> "MMS"
-            url.contains(".ts") -> "TS"
-            url.startsWith("srt://") -> "SRT"
-            else -> "HTTP"
         }
     }
 
