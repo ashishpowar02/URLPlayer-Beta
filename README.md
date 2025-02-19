@@ -95,9 +95,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contact
 
-Your Name - [@yourtwitter](https://twitter.com/yourtwitter)
+Your Name - [@samyak](mailto:arrowwouldpro@gmail.com)
 
-Project Link: [https://github.com/yourusername/URLPlayerBeta](https://github.com/yourusername/URLPlayerBeta)
+Project Link: [https://github.com/yourusername/URLPlayerBeta](https://github.com/samyak2403/URLPlayerBeta)
 
 ## Acknowledgments
 
