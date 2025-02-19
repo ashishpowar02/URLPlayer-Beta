@@ -12,16 +12,14 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.Player
-import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
-import com.google.android.exoplayer2.source.ProgressiveMediaSource
 import com.google.android.exoplayer2.source.hls.HlsMediaSource
+import com.google.android.exoplayer2.source.ProgressiveMediaSource
 import com.google.android.exoplayer2.ui.PlayerView
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
 import com.google.android.exoplayer2.util.MimeTypes
@@ -62,7 +60,6 @@ class PlayerActivity : AppCompatActivity() {
         userAgent = intent.getStringExtra("USER_AGENT")
 
         if (url == null) {
-            showError(getString(R.string.error_playback))
             finish()
             return
         }
@@ -88,107 +85,75 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun setupPlayer() {
-        try {
-            player = ExoPlayer.Builder(this)
-                .setSeekBackIncrementMs(INCREMENT_MILLIS)
-                .setSeekForwardIncrementMs(INCREMENT_MILLIS)
-                .build()
-                .also { exoPlayer ->
-                    playerView.player = exoPlayer
+        player = ExoPlayer.Builder(this)
+            .setSeekBackIncrementMs(INCREMENT_MILLIS)
+            .setSeekForwardIncrementMs(INCREMENT_MILLIS)
+            .build()
+            .also { exoPlayer ->
+                playerView.player = exoPlayer
 
-                    val dataSourceFactory = DefaultHttpDataSource.Factory()
-                        .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
-                        .setAllowCrossProtocolRedirects(true)
+                val dataSourceFactory = DefaultHttpDataSource.Factory()
+                    .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
 
-                    // Create appropriate media source based on URL type
-                    val mediaSource = when {
-                        url?.endsWith(".m3u8", ignoreCase = true) == true -> {
-                            // HLS stream
-                            HlsMediaSource.Factory(dataSourceFactory)
-                                .setAllowChunklessPreparation(true)
-                                .createMediaSource(MediaItem.fromUri(url!!))
-                        }
-                        url?.endsWith(".mp4", ignoreCase = true) == true ||
-                        url?.endsWith(".avi", ignoreCase = true) == true ||
-                        url?.endsWith(".mkv", ignoreCase = true) == true ||
-                        url?.endsWith(".mov", ignoreCase = true) == true ||
-                        url?.endsWith(".webm", ignoreCase = true) == true -> {
-                            // Progressive video formats
-                            val mediaItem = MediaItem.Builder()
-                                .setUri(Uri.parse(url))
-                                .setMimeType(MimeTypes.APPLICATION_MP4)
-                                .build()
-                            ProgressiveMediaSource.Factory(dataSourceFactory)
-                                .createMediaSource(mediaItem)
-                        }
-                        else -> {
-                            // Try to play as progressive download
-                            DefaultMediaSourceFactory(dataSourceFactory)
-                                .createMediaSource(MediaItem.fromUri(url!!))
-                        }
+                val mediaItem = MediaItem.fromUri(Uri.parse(url))
+                
+                // Create appropriate media source based on URL type
+                val mediaSource = when {
+                    url?.endsWith(".m3u8", ignoreCase = true) == true -> {
+                        // HLS stream
+                        HlsMediaSource.Factory(dataSourceFactory)
+                            .createMediaSource(mediaItem)
+                    }
+                    url?.endsWith(".mp4", ignoreCase = true) == true -> {
+                        // MP4 video
+                        val mp4MediaItem = MediaItem.Builder()
+                            .setUri(Uri.parse(url))
+                            .setMimeType(MimeTypes.APPLICATION_MP4)
+                            .build()
+                        ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .createMediaSource(mp4MediaItem)
+                    }
+                    else -> {
+                        // Try to play as progressive download
+                        ProgressiveMediaSource.Factory(dataSourceFactory)
+                            .createMediaSource(mediaItem)
+                    }
+                }
+
+                exoPlayer.setMediaSource(mediaSource)
+                exoPlayer.seekTo(playbackPosition)
+                exoPlayer.playWhenReady = true
+                exoPlayer.prepare()
+
+                exoPlayer.addListener(object : Player.Listener {
+                    override fun onIsLoadingChanged(isLoading: Boolean) {
+                        progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
                     }
 
-                    exoPlayer.setMediaSource(mediaSource)
-                    exoPlayer.seekTo(playbackPosition)
-                    exoPlayer.playWhenReady = true
-                    exoPlayer.prepare()
+                    override fun onPlayerError(error: PlaybackException) {
+                        errorTextView.visibility = View.VISIBLE
+                        playerView.visibility = View.GONE
+                    }
 
-                    exoPlayer.addListener(object : Player.Listener {
-                        override fun onIsLoadingChanged(isLoading: Boolean) {
-                            progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_READY && !isPlayerReady) {
+                            isPlayerReady = true
+                            progressBar.visibility = View.GONE
                         }
+                    }
+                })
 
-                        override fun onPlayerError(error: PlaybackException) {
-                            showError(error.message ?: getString(R.string.error_playback))
-                            errorTextView.visibility = View.VISIBLE
-                            playerView.visibility = View.GONE
-                        }
-
-                        override fun onPlaybackStateChanged(playbackState: Int) {
-                            when (playbackState) {
-                                Player.STATE_READY -> {
-                                    if (!isPlayerReady) {
-                                        isPlayerReady = true
-                                        progressBar.visibility = View.GONE
-                                    }
-                                }
-                                Player.STATE_BUFFERING -> {
-                                    progressBar.visibility = View.VISIBLE
-                                }
-                                Player.STATE_ENDED -> {
-                                    progressBar.visibility = View.GONE
-                                }
-                                Player.STATE_IDLE -> {
-                                    progressBar.visibility = View.GONE
-                                }
-                            }
-                        }
-                    })
-
-                    playerView.setControllerVisibilityListener { visibility ->
-                        if (visibility == View.VISIBLE) {
-                            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-                        } else {
-                            if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                                window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
-                                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
-                            }
+                playerView.setControllerVisibilityListener { visibility ->
+                    if (visibility == View.VISIBLE) {
+                        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                    } else {
+                        if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
+                                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
                         }
                     }
                 }
-        } catch (e: Exception) {
-            val errorMessage = when {
-                e.message?.contains("Cleartext HTTP traffic", ignoreCase = true) == true -> 
-                    "HTTP security error. Please use HTTPS URLs or contact support."
-                else -> e.message ?: getString(R.string.error_playback)
             }
-            showError(errorMessage)
-            finish()
-        }
-    }
-
-    private fun showError(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
     private fun lockScreen(lock: Boolean) {
@@ -242,59 +207,45 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        player.currentPosition.let { position ->
-            playbackPosition = position
-            outState.putLong("playbackPosition", position)
-        }
+        playbackPosition = player.currentPosition
+        outState.putLong("playbackPosition", playbackPosition)
         outState.putString("URL", url)
         outState.putString("USER_AGENT", userAgent)
-    }
-
-    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
-        super.onRestoreInstanceState(savedInstanceState)
-        playbackPosition = savedInstanceState.getLong("playbackPosition", 0L)
-        url = savedInstanceState.getString("URL")
-        userAgent = savedInstanceState.getString("USER_AGENT")
     }
 
     override fun onStart() {
         super.onStart()
         if (Util.SDK_INT > 23) {
-            setupPlayer()
+            player.playWhenReady = true
         }
     }
 
     override fun onResume() {
         super.onResume()
-        if (Util.SDK_INT <= 23) {
-            setupPlayer()
+        if (Util.SDK_INT <= 23 || !isPlayerReady) {
+            player.playWhenReady = true
         }
     }
 
     override fun onPause() {
         super.onPause()
         if (Util.SDK_INT <= 23) {
-            releasePlayer()
+            playbackPosition = player.currentPosition
+            player.playWhenReady = false
         }
     }
 
     override fun onStop() {
         super.onStop()
         if (Util.SDK_INT > 23) {
-            releasePlayer()
-        }
-    }
-
-    private fun releasePlayer() {
-        player.let { exoPlayer ->
-            playbackPosition = exoPlayer.currentPosition
-            exoPlayer.release()
+            playbackPosition = player.currentPosition
+            player.playWhenReady = false
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        releasePlayer()
+        player.release()
     }
 
     @Deprecated("Deprecated in Java")

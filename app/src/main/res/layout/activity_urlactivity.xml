@@ -15,8 +15,10 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="@color/yellow"
+            android:background="@color/Red"
             android:elevation="4dp"
+            android:titleTextColor="@android:color/white"
+
             app:contentInsetStartWithNavigation="0dp"
             android:windowSoftInputMode="adjustResize">
 
@@ -118,7 +120,7 @@
         android:layout_margin="16dp"
         app:cornerRadius="8dp"
         android:minHeight="56dp"
-        android:backgroundTint="@color/yellow"
+        android:backgroundTint="@color/Red"
         android:elevation="2dp"
         app:rippleColor="@color/yellow"
         android:stateListAnimator="@null"/>

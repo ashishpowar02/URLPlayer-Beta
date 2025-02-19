@@ -1,146 +1,135 @@
 package com.samyak.urlplayerbeta
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.view.View
-import android.view.WindowManager
+import android.view.MenuItem
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.samyak.urlplayerbeta.adapters.ChannelAdapter
-import com.samyak.urlplayerbeta.models.Videos
-import com.samyak.urlplayerbeta.screen.PlayerActivity
-import com.samyak.urlplayerbeta.screen.URLActivity
-import com.samyak.urlplayerbeta.screen.UpdateActivity
-import com.samyak.urlplayerbeta.utils.ChannelItemDecoration
+import androidx.core.content.ContextCompat
+import androidx.core.view.GravityCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.samyak.urlplayerbeta.databinding.ActivityMainBinding
+import com.samyak.urlplayerbeta.screen.HomeActivity
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var adapter: ChannelAdapter
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var channelList: MutableList<Videos>
-
-    companion object {
-        private const val UPDATE_REQUEST_CODE = 100
-    }
+    private lateinit var binding: ActivityMainBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
-        // Setup toolbar
-        val toolbar = findViewById<Toolbar>(R.id.toolbar)
-        setSupportActionBar(toolbar)
+
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+
+
+        setupToolbar()
+        setupClickListeners()
+        setupNavigationDrawer()
+    }
+
+    private fun setupToolbar() {
+        setSupportActionBar(binding.toolbar)
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
-            setDisplayShowHomeEnabled(true)
-            title = "M3U8 PlayList"
+            setHomeAsUpIndicator(R.drawable.ic_menu)
+            title = getString(R.string.app_name)
         }
+        binding.toolbar.setTitleTextColor(ContextCompat.getColor(this, R.color.white))
+    }
 
-        // Initialize RecyclerView
-        recyclerView = findViewById(R.id.recycler_view)
-        recyclerView.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
-            addItemDecoration(ChannelItemDecoration(resources.getDimensionPixelSize(R.dimen.item_spacing)))
-            setHasFixedSize(true)
-        }
-        channelList = mutableListOf()
-        
-        // Initialize adapter with all required callbacks
-        adapter = ChannelAdapter(
-            onPlayClick = { video ->
-                Intent(this, PlayerActivity::class.java).apply {
-                    putExtra("URL", video.url)
-                    putExtra("USER_AGENT", video.userAgent)
-                    startActivity(this)
-                }
-            },
-            onEditClick = { video ->
-                Intent(this, UpdateActivity::class.java).apply {
-                    putExtra("TITLE", video.name)
-                    putExtra("URL", video.url)
-                    putExtra("USER_AGENT", video.userAgent)
-                    startActivityForResult(this, UPDATE_REQUEST_CODE)
-                }
-            },
-            onError = { message ->
-                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-            }
-        )
-        recyclerView.adapter = adapter
-        
-        // Load saved channels
-        loadSavedChannels()
-
-        // Setup FAB
-        findViewById<FloatingActionButton>(R.id.add_Url).setOnClickListener {
-            startActivity(Intent(this, URLActivity::class.java))
-        }
-
-        // Set status bar color
-        window.apply {
-            clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
-            addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-            statusBarColor = getColor(R.color.black)
+    private fun setupClickListeners() {
+        binding.openHome.setOnClickListener {
+            startActivity(Intent(this, HomeActivity::class.java))
         }
     }
 
-    private fun loadSavedChannels() {
+    private fun setupNavigationDrawer() {
+        binding.navView.setNavigationItemSelectedListener { menuItem ->
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+            when (menuItem.itemId) {
+                R.id.nav_rate -> {
+                    rateApp()
+                    true
+                }
+                R.id.nav_share -> {
+                    shareApp()
+                    true
+                }
+                R.id.nav_privacy -> {
+                    openPrivacyPolicy()
+                    true
+                }
+                R.id.nav_contact -> {
+                    contactUs()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun rateApp() {
         try {
-            val sharedPreferences = getSharedPreferences("M3U8Links", MODE_PRIVATE)
-            val links = sharedPreferences.getStringSet("links", mutableSetOf()) ?: mutableSetOf()
-            
-            channelList.clear()
-            links.forEach { link ->
-                link.split("###").let { parts ->
-                    when (parts.size) {
-                        2 -> channelList.add(Videos(parts[0], parts[1], ""))
-                        3 -> channelList.add(Videos(parts[0], parts[1], parts[2]))
-                    }
-                }
-            }
-            
-            // Sort channels by name
-            channelList.sortBy { it.name }
-            
-            // Update adapter with new list
-            adapter.updateItems(channelList)
-            
-            // Show empty state if needed
-            updateEmptyState()
+            startActivity(Intent(Intent.ACTION_VIEW,
+                Uri.parse("market://details?id=$packageName")))
+        } catch (e: ActivityNotFoundException) {
+            startActivity(Intent(Intent.ACTION_VIEW,
+                Uri.parse("http://play.google.com/store/apps/details?id=$packageName")))
+        }
+    }
+
+    private fun shareApp() {
+        val shareIntent = Intent().apply {
+            action = Intent.ACTION_SEND
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT,
+                "Watch your favorite videos with ${getString(R.string.app_name)}!\n" +
+                        "Download now: http://play.google.com/store/apps/details?id=$packageName")
+        }
+        startActivity(Intent.createChooser(shareIntent, getString(R.string.share_message)))
+    }
+
+    private fun openPrivacyPolicy() {
+        val privacyUrl = "https://your-privacy-policy-url.com"
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(privacyUrl)))
         } catch (e: Exception) {
-//            Toast.makeText(this, getString(R.string.error_loading_channels), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.error_privacy_policy), Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun updateEmptyState() {
-        if (channelList.isEmpty()) {
-            // Show empty state view
-            findViewById<View>(R.id.empty_state_view)?.visibility = View.VISIBLE
-            recyclerView.visibility = View.GONE
+    private fun contactUs() {
+        val intent = Intent(Intent.ACTION_SENDTO).apply {
+            data = Uri.parse("mailto:support@yourdomain.com")
+            putExtra(Intent.EXTRA_SUBJECT, getString(R.string.email_subject))
+        }
+        try {
+            startActivity(Intent.createChooser(intent, getString(R.string.contact_us)))
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.error_no_email), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            android.R.id.home -> {
+                binding.drawerLayout.openDrawer(GravityCompat.START)
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    override fun onBackPressed() {
+        if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
         } else {
-            // Show recycler view
-            findViewById<View>(R.id.empty_state_view)?.visibility = View.GONE
-            recyclerView.visibility = View.VISIBLE
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        loadSavedChannels()
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        onBackPressed()
-        return true
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == UPDATE_REQUEST_CODE && resultCode == RESULT_OK) {
-            loadSavedChannels()
+            super.onBackPressed()
         }
     }
 }

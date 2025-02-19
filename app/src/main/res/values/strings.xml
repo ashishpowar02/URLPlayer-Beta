@@ -24,8 +24,6 @@
     <string name="error_updating_channel">Error updating channel</string>
     <string name="error_deleting_channel">Error deleting channel</string>
     <string name="error_playback">Error playing video</string>
-    <string name="error_cleartext_traffic">HTTP security error. Please use HTTPS URLs or contact support.</string>
-    <string name="error_network">Network error. Please check your connection.</string>
 
     <!-- Success Messages -->
     <string name="success_channel_saved">Channel saved successfully</string>
@@ -59,4 +57,19 @@
 
     <!-- New string for empty state icon -->
     <string name="empty_state_icon">Empty state icon</string>
+
+
+        <!-- App Info -->
+        <string name="app_description">Watch Online Videos</string>
+
+        <!-- Navigation Menu -->
+        <string name="rate_app">Rate App</string>
+        <string name="share_app">Share App</string>
+        <string name="privacy_policy">Privacy Policy</string>
+        <string name="contact_us">Contact Us</string>
+        <string name="share_message">Share via</string>
+        <string name="email_subject">YTV PRO Feedback</string>
+        <string name="error_privacy_policy">Unable to open privacy policy</string>
+        <string name="error_no_email">No email app found</string>
+
 </resources>
