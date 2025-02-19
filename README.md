@@ -52,13 +52,13 @@ URL Player Beta is an Android application that allows users to play online video
 - Gradle 7.0 or higher
 
 ### Steps
-1. Clone the repository:
-2. 
-3. Open the project in Android Studio
+1. Clone the repository: https://github.com/samyak2403/URLPlayer-Beta.git
 
-4. Sync Gradle and build the project
+2. Open the project in Android Studio
 
-5. Run on your device or emulator
+3. Sync Gradle and build the project
+
+4. Run on your device or emulator
 
 ## Libraries Used
 
@@ -84,7 +84,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 Your Name - [@yourtwitter](https://twitter.com/yourtwitter)
 
-Project Link: [https://github.com/yourusername/URLPlayerBeta](https://github.com/samyak2403/URLPlayerBeta)
+Project Link: [https://github.com/yourusername/URLPlayerBeta](https://github.com/yourusername/URLPlayerBeta)
 
 ## Acknowledgments
 
