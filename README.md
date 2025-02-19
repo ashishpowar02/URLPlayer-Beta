@@ -1,5 +1,10 @@
 # URL Player Beta
 
+<div align="center">  
+  <img src="https://github.com/samyak2403/Sportsmine/blob/main/app/src/main/res/drawable/ic_tv.png" alt="Sportsmine Logo" width="120"/>  
+  <h3>Your Ultimate URL Player Beta</h3>  
+</div>  
+
 URL Player Beta is an Android application that allows users to play online videos from various streaming sources. The app supports multiple video formats and streaming protocols.
 
 ## Features
