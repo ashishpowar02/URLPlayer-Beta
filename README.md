@@ -1,7 +1,7 @@
 # URL Player Beta
 
 <div align="center">  
-  <img src="https://github.com/samyak2403/Sportsmine/blob/main/app/src/main/res/drawable/ic_tv.png" alt="Sportsmine Logo" width="120"/>  
+  <img src="https://github.com/samyak2403/URLPlayer-Beta/blob/master/image/URLPlayer-Beta.png" alt="Sportsmine Logo" width="120"/>  
   <h3>Your Ultimate URL Player Beta</h3>  
 </div>  
 
