@@ -62,9 +62,10 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var linearLayoutControlBottom: LinearLayout
 
     // Custom controller views
-    private lateinit var playPauseButton: ImageButton
-    private lateinit var tvChannelName: TextView
+    private lateinit var backButton: ImageButton
+    private lateinit var videoTitle: TextView
     private lateinit var moreFeaturesButton: ImageButton
+    private lateinit var playPauseButton: ImageButton
     private lateinit var orientationButton: ImageButton
     private lateinit var repeatButton: ImageButton
     private lateinit var prevButton: ImageButton
@@ -114,7 +115,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -128,44 +128,48 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             return
         }
 
+        // Initialize views first
         initializeViews()
-        setupPlayer()
 
-        // Initialize gesture detector
+        // Initialize gesture and audio controls
         gestureDetectorCompat = GestureDetectorCompat(this, this)
-        
-        // Initialize audio manager
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         volume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
     }
 
     private fun initializeViews() {
+        // Initialize main views from binding
         playerView = binding.playerView
         progressBar = binding.progressBar
         errorTextView = binding.errorTextView
         linearLayoutControlUp = binding.linearLayoutControlUp
         linearLayoutControlBottom = binding.linearLayoutControlBottom
 
+        // Setup player first
+        setupPlayer()
+
+        // Then initialize custom controller views and actions
         setupCustomControllerViews()
         setupCustomControllerActions()
     }
 
     private fun setupCustomControllerViews() {
         try {
-            // Find all controller views
-            playPauseButton = playerView.findViewById(R.id.playPauseBtn)
-            tvChannelName = playerView.findViewById(R.id.tvChannelName)
+            // Find all controller views from playerView
+            backButton = playerView.findViewById(R.id.backBtn)
+            videoTitle = playerView.findViewById(R.id.videoTitle)
             moreFeaturesButton = playerView.findViewById(R.id.moreFeaturesBtn)
+            playPauseButton = playerView.findViewById(R.id.playPauseBtn)
             orientationButton = playerView.findViewById(R.id.orientationBtn)
             repeatButton = playerView.findViewById(R.id.repeatBtn)
             prevButton = playerView.findViewById(R.id.prevBtn)
             nextButton = playerView.findViewById(R.id.nextBtn)
             fullScreenButton = playerView.findViewById(R.id.fullScreenBtn)
 
-            // Set initial channel name
+            // Set initial title
             val channelName = intent.getStringExtra("CHANNEL_NAME") ?: getString(R.string.video_name)
-            tvChannelName.text = channelName
-            tvChannelName.isSelected = true // Enable marquee
+            videoTitle.text = channelName
+            videoTitle.isSelected = true
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "Error setting up controller views", Toast.LENGTH_SHORT).show()
@@ -174,7 +178,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private fun setupCustomControllerActions() {
         // Back button
-        playerView.findViewById<ImageButton>(R.id.backButton)?.setOnClickListener {
+        backButton.setOnClickListener {
             onBackPressed()
         }
 
@@ -553,7 +557,10 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     }
 
     private fun setupPlayer() {
-        // Initialize track selector with adaptive settings
+        if (::player.isInitialized) {
+            player.release()
+        }
+
         trackSelector = DefaultTrackSelector(this).apply {
             setParameters(buildUponParameters().setMaxVideoSizeSd())
         }
@@ -563,89 +570,69 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             .setSeekBackIncrementMs(INCREMENT_MILLIS)
             .setSeekForwardIncrementMs(INCREMENT_MILLIS)
             .build()
-            .also { exoPlayer ->
-                playerView.player = exoPlayer
 
-                val dataSourceFactory = DefaultHttpDataSource.Factory()
-                    .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
+        // Set player to playerView
+        playerView.player = player
 
-                val mediaItem = MediaItem.fromUri(Uri.parse(url))
+        // Setup media source
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
 
-                // Create appropriate media source based on URL type
-                val mediaSource = when {
-                    url?.endsWith(".m3u8", ignoreCase = true) == true -> {
-                        // HLS stream
-                        HlsMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(mediaItem)
-                    }
-                    url?.endsWith(".mp4", ignoreCase = true) == true -> {
-                        // MP4 video
-                        val mp4MediaItem = MediaItem.Builder()
-                            .setUri(Uri.parse(url))
-                            .setMimeType(MimeTypes.APPLICATION_MP4)
-                            .build()
-                        ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(mp4MediaItem)
-                    }
-                    else -> {
-                        // Try to play as progressive download
-                        ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(mediaItem)
-                    }
-                }
+        val mediaItem = MediaItem.fromUri(Uri.parse(url))
+        val mediaSource = when {
+            url?.endsWith(".m3u8", ignoreCase = true) == true -> {
+                HlsMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(mediaItem)
+            }
+            url?.endsWith(".mp4", ignoreCase = true) == true -> {
+                // MP4 video
+                val mp4MediaItem = MediaItem.Builder()
+                    .setUri(Uri.parse(url))
+                    .setMimeType(MimeTypes.APPLICATION_MP4)
+                    .build()
+                ProgressiveMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(mp4MediaItem)
+            }
+            else -> {
+                // Try to play as progressive download
+                ProgressiveMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(mediaItem)
+            }
+        }
 
-                exoPlayer.setMediaSource(mediaSource)
-                exoPlayer.seekTo(playbackPosition)
-                exoPlayer.playWhenReady = true
-                exoPlayer.prepare()
+        player.setMediaSource(mediaSource)
+        player.seekTo(playbackPosition)
+        player.playWhenReady = true
+        player.prepare()
 
-                exoPlayer.addListener(object : Player.Listener {
-                    override fun onIsLoadingChanged(isLoading: Boolean) {
-                        progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
-                    }
+        setupPlayerListeners()
+    }
 
-                    override fun onPlayerError(error: PlaybackException) {
-                        errorTextView.visibility = View.VISIBLE
-                        playerView.visibility = View.GONE
-                    }
-
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        if (playbackState == Player.STATE_READY && !isPlayerReady) {
-                            isPlayerReady = true
-                            progressBar.visibility = View.GONE
-                        }
-                    }
-
-                    override fun onIsPlayingChanged(isPlaying: Boolean) {
-                        playPauseButton.setImageResource(
-                            if (isPlaying) R.drawable.pause_icon
-                            else R.drawable.play_icon
-                        )
-                    }
-
-                    override fun onVideoSizeChanged(videoSize: VideoSize) {
-                        updateQualityInfo()
-                    }
-                })
-
-                playerView.setControllerVisibilityListener { visibility ->
-                    if (visibility == View.VISIBLE) {
-                        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-                    } else {
-                        if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
-                                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
-                        }
-                    }
+    private fun setupPlayerListeners() {
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY && !isPlayerReady) {
+                    isPlayerReady = true
+                    progressBar.visibility = View.GONE
                 }
             }
 
-        initializeQuality()
-        setupGestureControls()
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playPauseButton.setImageResource(
+                    if (isPlaying) R.drawable.pause_icon
+                    else R.drawable.play_icon
+                )
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                errorTextView.visibility = View.VISIBLE
+                progressBar.visibility = View.GONE
+            }
+        })
     }
 
     private fun updateQualityInfo() {
-        tvChannelName.text = getCurrentQualityInfo()
+        videoTitle.text = getCurrentQualityInfo()
     }
 
     private fun lockScreen(lock: Boolean) {
