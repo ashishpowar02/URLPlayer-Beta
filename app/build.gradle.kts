@@ -65,6 +65,18 @@ dependencies {
     implementation("com.airbnb.android:lottie:4.2.2")
 
 
+
+    //for vertical progress bar
+    implementation(libs.verticalSeekbar)
+
+    //for doubleTapFeature
+    implementation(libs.doubleTapPlayerView)
+
+    //custom chrome tabs for integrating youtube
+    implementation(libs.androidx.browser)
+
+
+
     // Gauge Library
 //    implementation("com.github.Gruzer:simple-gauge-android:0.3.1")
 

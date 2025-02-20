@@ -25,7 +25,9 @@
             android:exported="false" />
         <activity
             android:name=".screen.PlayerActivity"
-            android:exported="false" />
+            android:configChanges="orientation|screenSize|layoutDirection"
+            android:exported="false"
+            android:supportsPictureInPicture="true" />
         <activity
             android:name=".screen.URLActivity"
             android:exported="true" >

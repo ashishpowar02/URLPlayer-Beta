@@ -59,17 +59,50 @@
     <string name="empty_state_icon">Empty state icon</string>
 
 
-        <!-- App Info -->
-        <string name="app_description">Watch Online Videos</string>
+    <!-- App Info -->
+    <string name="app_description">Watch Online Videos</string>
 
-        <!-- Navigation Menu -->
-        <string name="rate_app">Rate App</string>
-        <string name="share_app">Share App</string>
-        <string name="privacy_policy">Privacy Policy</string>
-        <string name="contact_us">Contact Us</string>
-        <string name="share_message">Share via</string>
-        <string name="email_subject">YTV PRO Feedback</string>
-        <string name="error_privacy_policy">Unable to open privacy policy</string>
-        <string name="error_no_email">No email app found</string>
+    <!-- Navigation Menu -->
+    <string name="rate_app">Rate App</string>
+    <string name="share_app">Share App</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="contact_us">Contact Us</string>
+    <string name="share_message">Share via</string>
+    <string name="email_subject">YTV PRO Feedback</string>
+    <string name="error_privacy_policy">Unable to open privacy policy</string>
+    <string name="error_no_email">No email app found</string>
+
+    <string name="duration">00:00</string>
+    <string name="image">Image</string>
+    <string name="loading">Loading...</string>
+    <string name="video_name">Video Name</string>
+    <string name="folder_name">Folder Name</string>
+    <string name="semi_colon">/</string>
+    <string name="lock">Lock Button</string>
+    <string name="back_btn">Back</string>
+    <string name="menu">Menu</string>
+    <string name="prev_btn">Previous</string>
+    <string name="next_btn">Next</string>
+    <string name="repeat_btn">Repeat</string>
+    <string name="fullscreen_btn">Fullscreen</string>
+    <string name="play_btn">Play</string>
+
+    <!--    for menu-->
+    <string name="audio_track">Audio Track</string>
+    <string name="subtitles">Subtitles</string>
+    <string name="booster">Booster</string>
+    <string name="speed">1.0x</string>
+    <string name="sleep_timer">Sleep Timer</string>
+    <string name="pip_mode">PiP Mode</string>
+    <string name="search">Search</string>
+
+    <!--strings for video more features-->
+    <string name="rename">Rename </string>
+    <string name="info">Info</string>
+    <string name="share">Share</string>
+    <string name="orientation">Orientation</string>
+    <string name="O">0</string>
+    <string name="apply_to_all">Apply to all videos</string>
+    <string name="video_quality">Video Quality</string>
 
 </resources>
