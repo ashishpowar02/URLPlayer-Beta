@@ -105,4 +105,9 @@
     <string name="apply_to_all">Apply to all videos</string>
     <string name="video_quality">Video Quality</string>
 
+    <string name="select_quality">Select Quality</string>
+    <string name="auto_quality_enabled">Auto quality enabled</string>
+    <string name="quality_changed">Quality changed to %1$s</string>
+    <string name="quality_change_failed">Failed to change quality: %1$s</string>
+
 </resources>

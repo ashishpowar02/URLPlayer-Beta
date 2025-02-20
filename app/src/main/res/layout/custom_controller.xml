@@ -15,6 +15,7 @@
         android:layout_height="wrap_content"
         android:background="#42000000"
         android:orientation="horizontal"
+        android:padding="8dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -29,7 +30,7 @@
             app:tint="@color/white" />
 
         <TextView
-            android:id="@+id/videoTitle"
+            android:id="@+id/tvChannelName"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
@@ -46,10 +47,8 @@
             android:id="@+id/moreFeaturesBtn"
             android:layout_width="50dp"
             android:layout_height="50dp"
-            android:layout_marginEnd="50dp"
             android:backgroundTint="@android:color/transparent"
-            android:contentDescription="@string/back_btn"
-            android:padding="10dp"
+            android:contentDescription="@string/menu"
             android:src="@drawable/menu_icon"
             app:tint="@color/white" />
 

@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
@@ -23,12 +24,14 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.source.hls.HlsMediaSource
 import com.google.android.exoplayer2.source.ProgressiveMediaSource
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector
 import com.google.android.exoplayer2.ui.PlayerView
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
 import com.google.android.exoplayer2.util.MimeTypes
@@ -37,6 +40,8 @@ import com.samyak.urlplayerbeta.R
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import com.samyak.urlplayerbeta.databinding.MoreFeaturesBinding
+import com.google.android.exoplayer2.trackselection.TrackSelectionParameters
+import com.google.android.exoplayer2.video.VideoSize
 
 class PlayerActivity : AppCompatActivity() {
     private lateinit var player: ExoPlayer
@@ -48,7 +53,7 @@ class PlayerActivity : AppCompatActivity() {
 
     // Custom controller views
     private lateinit var playPauseButton: ImageButton
-    private lateinit var videoTitleText: TextView
+    private lateinit var tvChannelName: TextView
     private lateinit var moreFeaturesButton: ImageButton
     private lateinit var orientationButton: ImageButton
     private lateinit var repeatButton: ImageButton
@@ -61,6 +66,27 @@ class PlayerActivity : AppCompatActivity() {
     private var isFullScreen = false
     private var url: String? = null
     private var userAgent: String? = null
+    private lateinit var trackSelector: DefaultTrackSelector
+    private var currentQuality = "Auto"
+    
+    private data class VideoQuality(
+        val height: Int,
+        val width: Int,
+        val bitrate: Int,
+        val label: String,
+        val description: String
+    )
+
+    private val availableQualities = listOf(
+        VideoQuality(1080, 1920, 8_000_000, "1080p", "Full HD - Best quality"),
+        VideoQuality(720, 1280, 5_000_000, "720p", "HD - High quality"),
+        VideoQuality(480, 854, 2_500_000, "480p", "SD - Good quality"),
+        VideoQuality(360, 640, 1_500_000, "360p", "SD - Normal quality"),
+        VideoQuality(240, 426, 800_000, "240p", "Low - Basic quality"),
+        VideoQuality(144, 256, 500_000, "144p", "Very Low - Minimal quality")
+    )
+
+    private var isManualQualityControl = false
 
     companion object {
         private const val INCREMENT_MILLIS = 5000L
@@ -99,19 +125,25 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun setupCustomControllerViews() {
-        // Find all controller views
-        playPauseButton = playerView.findViewById(R.id.playPauseBtn)
-        videoTitleText = playerView.findViewById(R.id.videoTitle)
-        moreFeaturesButton = playerView.findViewById(R.id.moreFeaturesBtn)
-        orientationButton = playerView.findViewById(R.id.orientationBtn)
-        repeatButton = playerView.findViewById(R.id.repeatBtn)
-        prevButton = playerView.findViewById(R.id.prevBtn)
-        nextButton = playerView.findViewById(R.id.nextBtn)
-        fullScreenButton = playerView.findViewById(R.id.fullScreenBtn)
+        try {
+            // Find all controller views
+            playPauseButton = playerView.findViewById(R.id.playPauseBtn)
+            tvChannelName = playerView.findViewById(R.id.tvChannelName)
+            moreFeaturesButton = playerView.findViewById(R.id.moreFeaturesBtn)
+            orientationButton = playerView.findViewById(R.id.orientationBtn)
+            repeatButton = playerView.findViewById(R.id.repeatBtn)
+            prevButton = playerView.findViewById(R.id.prevBtn)
+            nextButton = playerView.findViewById(R.id.nextBtn)
+            fullScreenButton = playerView.findViewById(R.id.fullScreenBtn)
 
-        // Set initial video title
-        videoTitleText.text = intent.getStringExtra("TITLE") ?: getString(R.string.video_name)
-        videoTitleText.isSelected = true // Enable marquee
+            // Set initial channel name
+            val channelName = intent.getStringExtra("CHANNEL_NAME") ?: getString(R.string.video_name)
+            tvChannelName.text = channelName
+            tvChannelName.isSelected = true // Enable marquee
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Error setting up controller views", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun setupCustomControllerActions() {
@@ -211,6 +243,12 @@ class PlayerActivity : AppCompatActivity() {
                     playVideo() // Resume video if feature not supported
                 }
             }
+
+            // Video Quality button in more features dialog
+            bindingMF.videoQuality.setOnClickListener {
+                dialog.dismiss()
+                showQualityDialog()
+            }
         }
     }
 
@@ -277,8 +315,171 @@ class PlayerActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun showQualityDialog() {
+        val qualities = getAvailableQualities()
+        val qualityItems = buildQualityItems(qualities)
+        val currentIndex = (qualityItems.indexOfFirst { it.contains(currentQuality) }).coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(this, R.style.QualityDialogStyle)
+            .setTitle(getString(R.string.select_quality))
+            .setSingleChoiceItems(qualityItems.toTypedArray(), currentIndex) { dialog, which ->
+                val selectedQuality = if (which == 0) "Auto" else qualities[which - 1].label
+                isManualQualityControl = selectedQuality != "Auto"
+                applyQuality(selectedQuality, qualities)
+                dialog.dismiss()
+
+                Toast.makeText(
+                    this,
+                    if (selectedQuality == "Auto") {
+                        getString(R.string.auto_quality_enabled)
+                    } else {
+                        getString(R.string.quality_changed, selectedQuality)
+                    },
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .create()
+            .show()
+    }
+
+    private fun buildQualityItems(qualities: List<VideoQuality>): List<String> {
+        val items = mutableListOf("Auto (Recommended)")
+        
+        qualities.forEach { quality ->
+            val currentFormat = player.videoFormat
+            val isCurrent = when {
+                currentFormat == null -> false
+                !isManualQualityControl -> currentFormat.height == quality.height
+                else -> currentQuality == quality.label
+            }
+            
+            val qualityText = buildString {
+                append(quality.label)
+                append(" - ")
+                append(quality.description)
+                if (isCurrent) append(" ✓")
+            }
+            items.add(qualityText)
+        }
+        
+        return items
+    }
+
+    private fun getAvailableQualities(): List<VideoQuality> {
+        val tracks = mutableListOf<VideoQuality>()
+        
+        try {
+            player.currentTrackGroups.let { trackGroups ->
+                for (groupIndex in 0 until trackGroups.length) {
+                    val group = trackGroups[groupIndex]
+                    
+                    for (trackIndex in 0 until group.length) {
+                        val format = group.getFormat(trackIndex)
+                        
+                        if (format.height > 0 && format.width > 0) {
+                            availableQualities.find { 
+                                it.height == format.height 
+                            }?.let { tracks.add(it) }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
+        return tracks.distinct().sortedByDescending { it.height }
+    }
+
+    private fun applyQuality(quality: String, availableTracks: List<VideoQuality>) {
+        val parameters = trackSelector.buildUponParameters()
+
+        when (quality) {
+            "Auto" -> {
+                parameters.clearVideoSizeConstraints()
+                    .setForceHighestSupportedBitrate(false)
+                    .setMaxVideoBitrate(Int.MAX_VALUE)
+                    .setAllowVideoMixedMimeTypeAdaptiveness(true)
+                    .setAllowVideoNonSeamlessAdaptiveness(true)
+            }
+            else -> {
+                availableTracks.find { it.label == quality }?.let { track ->
+                    parameters.setMaxVideoSize(track.width, track.height)
+                        .setMinVideoSize(track.width/2, track.height/2)
+                        .setMaxVideoBitrate(track.bitrate)
+                        .setMinVideoBitrate(track.bitrate/2)
+                        .setForceHighestSupportedBitrate(true)
+                        .setAllowVideoMixedMimeTypeAdaptiveness(false)
+                }
+            }
+        }
+
+        try {
+            val position = player.currentPosition
+            val wasPlaying = player.isPlaying
+
+            trackSelector.setParameters(parameters)
+            currentQuality = quality
+
+            // Save preferences
+            getSharedPreferences("player_settings", Context.MODE_PRIVATE).edit().apply {
+                putString("preferred_quality", quality)
+                putBoolean("manual_quality_control", isManualQualityControl)
+                apply()
+            }
+
+            // Restore playback state
+            player.seekTo(position)
+            player.playWhenReady = wasPlaying
+
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                getString(R.string.quality_change_failed, e.message),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun initializeQuality() {
+        val prefs = getSharedPreferences("player_settings", Context.MODE_PRIVATE)
+        val savedQuality = prefs.getString("preferred_quality", "Auto") ?: "Auto"
+        isManualQualityControl = prefs.getBoolean("manual_quality_control", false)
+
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    getAvailableQualities().let { tracks ->
+                        if (tracks.isNotEmpty()) {
+                            // If manual control is off, use Auto
+                            val qualityToApply = if (isManualQualityControl) savedQuality else "Auto"
+                            applyQuality(qualityToApply, tracks)
+                            player.removeListener(this)
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    private fun getCurrentQualityInfo(): String {
+        val currentTrack = player.videoFormat
+        return when {
+            currentTrack == null -> "Unknown"
+            !isManualQualityControl -> "Auto (${currentTrack.height}p)"
+            else -> currentQuality
+        }
+    }
+
     private fun setupPlayer() {
+        // Initialize track selector with adaptive settings
+        trackSelector = DefaultTrackSelector(this).apply {
+            setParameters(buildUponParameters().setMaxVideoSizeSd())
+        }
+
         player = ExoPlayer.Builder(this)
+            .setTrackSelector(trackSelector)
             .setSeekBackIncrementMs(INCREMENT_MILLIS)
             .setSeekForwardIncrementMs(INCREMENT_MILLIS)
             .build()
@@ -341,6 +542,10 @@ class PlayerActivity : AppCompatActivity() {
                             else R.drawable.play_icon
                         )
                     }
+
+                    override fun onVideoSizeChanged(videoSize: VideoSize) {
+                        updateQualityInfo()
+                    }
                 })
 
                 playerView.setControllerVisibilityListener { visibility ->
@@ -354,6 +559,12 @@ class PlayerActivity : AppCompatActivity() {
                     }
                 }
             }
+
+        initializeQuality()
+    }
+
+    private fun updateQualityInfo() {
+        tvChannelName.text = getCurrentQualityInfo()
     }
 
     private fun lockScreen(lock: Boolean) {
