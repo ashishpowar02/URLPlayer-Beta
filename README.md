@@ -64,7 +64,7 @@ URL Player Beta is an Android application that allows users to play online video
 
 ## Installation
 
-1. Download the latest APK from the [Releases](link-to-releases) section
+1. Download the latest APK from the [Releases](https://github.com/samyak2403/URLPlayer-Beta/releases/latest) section
 2. Enable "Install from Unknown Sources" in your Android settings
 3. Install the APK
 4. Start enjoying your favorite videos!
