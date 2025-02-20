@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageButton
@@ -38,12 +39,21 @@ import com.google.android.exoplayer2.util.MimeTypes
 import com.google.android.exoplayer2.util.Util
 import com.samyak.urlplayerbeta.R
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-
-import com.samyak.urlplayerbeta.databinding.MoreFeaturesBinding
-import com.google.android.exoplayer2.trackselection.TrackSelectionParameters
+import com.google.android.material.snackbar.Snackbar
+import java.util.Locale
+import android.media.AudioManager
+import android.content.res.Resources
+import android.view.GestureDetector
+import androidx.core.view.GestureDetectorCompat
+import androidx.core.view.MotionEventCompat
+import com.github.vkay94.dtpv.youtube.YouTubeOverlay
 import com.google.android.exoplayer2.video.VideoSize
+import com.samyak.urlplayerbeta.databinding.MoreFeaturesBinding
+import kotlin.math.abs
+import com.samyak.urlplayerbeta.databinding.ActivityPlayerBinding
 
-class PlayerActivity : AppCompatActivity() {
+class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
+    private lateinit var binding: ActivityPlayerBinding
     private lateinit var player: ExoPlayer
     private lateinit var playerView: PlayerView
     private lateinit var progressBar: ProgressBar
@@ -88,16 +98,25 @@ class PlayerActivity : AppCompatActivity() {
 
     private var isManualQualityControl = false
 
+    private lateinit var gestureDetectorCompat: GestureDetectorCompat
+    private var minSwipeY: Float = 0f
+    private var brightness: Int = 0
+    private var volume: Int = 0
+    private var audioManager: AudioManager? = null
+
+    private var isLocked = false
+
     companion object {
         private const val INCREMENT_MILLIS = 5000L
         var pipStatus: Int = 0
-        private var volume: Int = 0
     }
 
     @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_player)
+        
+        binding = ActivityPlayerBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -111,14 +130,21 @@ class PlayerActivity : AppCompatActivity() {
 
         initializeViews()
         setupPlayer()
+
+        // Initialize gesture detector
+        gestureDetectorCompat = GestureDetectorCompat(this, this)
+        
+        // Initialize audio manager
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        volume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
     }
 
     private fun initializeViews() {
-        playerView = findViewById(R.id.playerView)
-        progressBar = findViewById(R.id.progressBar)
-        errorTextView = findViewById(R.id.errorTextView)
-        linearLayoutControlUp = findViewById(R.id.linearLayoutControlUp)
-        linearLayoutControlBottom = findViewById(R.id.linearLayoutControlBottom)
+        playerView = binding.playerView
+        progressBar = binding.progressBar
+        errorTextView = binding.errorTextView
+        linearLayoutControlUp = binding.linearLayoutControlUp
+        linearLayoutControlBottom = binding.linearLayoutControlBottom
 
         setupCustomControllerViews()
         setupCustomControllerActions()
@@ -202,45 +228,89 @@ class PlayerActivity : AppCompatActivity() {
 
         // More Features button
         moreFeaturesButton.setOnClickListener {
-            pauseVideo() // Pause video when dialog opens
+            pauseVideo()
             val customDialog = LayoutInflater.from(this)
-                .inflate(R.layout.more_features, null, false) // Changed parent to null
+                .inflate(R.layout.more_features, null, false)
             val bindingMF = MoreFeaturesBinding.bind(customDialog)
             val dialog = MaterialAlertDialogBuilder(this)
                 .setView(customDialog)
-                .setOnCancelListener { playVideo() } // Resume video when dialog is cancelled
+                .setOnCancelListener { playVideo() }
                 .setBackground(ColorDrawable(0x803700B3.toInt()))
                 .create()
             dialog.show()
 
-            // Handle PiP Mode button click
-            bindingMF.pipModeBtn.setOnClickListener {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-                    val status = appOps.checkOpNoThrow(
-                        AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
-                        android.os.Process.myUid(),
-                        packageName
-                    ) == AppOpsManager.MODE_ALLOWED
-
-                    if (status) {
-                        enterPictureInPictureMode(PictureInPictureParams.Builder().build())
-                        dialog.dismiss()
-                        playerView.hideController()
-                        playVideo() // Resume video in PiP mode
-                        pipStatus = 0
-                    } else {
-                        // Open PiP settings if permission not granted
-                        val intent = Intent(
-                            "android.settings.PICTURE_IN_PICTURE_SETTINGS",
-                            Uri.parse("package:$packageName")
-                        )
-                        startActivity(intent)
+            // Add subtitle button click listener
+            bindingMF.subtitlesBtn.setOnClickListener {
+                dialog.dismiss()
+                playVideo()
+                val subtitles = ArrayList<String>()
+                val subtitlesList = ArrayList<String>()
+                var hasSubtitles = false
+                
+                // Get available subtitle tracks
+                try {
+                    for (group in player.currentTracksInfo.trackGroupInfos) {
+                        if (group.trackType == C.TRACK_TYPE_TEXT) {
+                            hasSubtitles = true
+                            val groupInfo = group.trackGroup
+                            for (i in 0 until groupInfo.length) {
+                                val format = groupInfo.getFormat(i)
+                                val language = format.language ?: "unknown"
+                                val label = format.label ?: Locale(language).displayLanguage
+                                
+                                subtitles.add(language)
+                                subtitlesList.add(
+                                    "${subtitlesList.size + 1}. $label" + 
+                                    if (language != "unknown") " (${Locale(language).displayLanguage})" else ""
+                                )
+                            }
+                        }
                     }
-                } else {
-                    Toast.makeText(this, "Feature Not Supported!", Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
-                    playVideo() // Resume video if feature not supported
+
+                    if (!hasSubtitles) {
+                        Toast.makeText(this, "No subtitles available for this video", Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
+
+                    val tempTracks = subtitlesList.toArray(arrayOfNulls<CharSequence>(subtitlesList.size))
+                    
+                    MaterialAlertDialogBuilder(this, R.style.SubtitleDialogStyle)
+                        .setTitle("Select Subtitles")
+                        .setOnCancelListener { playVideo() }
+                        .setPositiveButton("Off Subtitles") { self, _ ->
+                            trackSelector.setParameters(
+                                trackSelector.buildUponParameters()
+                                    .setRendererDisabled(C.TRACK_TYPE_TEXT, true)
+                            )
+                            self.dismiss()
+                            playVideo()
+                            Snackbar.make(playerView, "Subtitles disabled", 3000).show()
+                        }
+                        .setItems(tempTracks) { _, position ->
+                            try {
+                                trackSelector.setParameters(
+                                    trackSelector.buildUponParameters()
+                                        .setRendererDisabled(C.TRACK_TYPE_TEXT, false)
+                                        .setPreferredTextLanguage(subtitles[position])
+                                )
+                                Snackbar.make(
+                                    playerView,
+                                    "Selected: ${subtitlesList[position]}", 
+                                    3000
+                                ).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(this, "Error selecting subtitles", Toast.LENGTH_SHORT).show()
+                            }
+                            playVideo()
+                        }
+                        .setBackground(ColorDrawable(0x803700B3.toInt()))
+                        .create()
+                        .apply {
+                            show()
+                            getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.WHITE)
+                        }
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Error loading subtitles", Toast.LENGTH_SHORT).show()
                 }
             }
 
@@ -249,6 +319,16 @@ class PlayerActivity : AppCompatActivity() {
                 dialog.dismiss()
                 showQualityDialog()
             }
+        }
+
+        // Lock button
+        binding.lockButton.setOnClickListener {
+            isLocked = !isLocked
+            lockScreen(isLocked)
+            binding.lockButton.setImageResource(
+                if (isLocked) R.drawable.close_lock_icon 
+                else R.drawable.lock_open_icon
+            )
         }
     }
 
@@ -561,6 +641,7 @@ class PlayerActivity : AppCompatActivity() {
             }
 
         initializeQuality()
+        setupGestureControls()
     }
 
     private fun updateQualityInfo() {
@@ -570,6 +651,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun lockScreen(lock: Boolean) {
         linearLayoutControlUp.visibility = if (lock) View.INVISIBLE else View.VISIBLE
         linearLayoutControlBottom.visibility = if (lock) View.INVISIBLE else View.VISIBLE
+        playerView.useController = !lock
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -652,4 +734,90 @@ class PlayerActivity : AppCompatActivity() {
             pauseVideo() // Pause video when exiting PiP mode
         }
     }
+
+    @SuppressLint("ClickableViewAccessibility") 
+    private fun setupGestureControls() {
+        playerView.player = player
+        
+        // Setup YouTube style overlay
+        binding.ytOverlay.performListener(object : YouTubeOverlay.PerformListener {
+            override fun onAnimationEnd() {
+                binding.ytOverlay.visibility = View.GONE
+            }
+
+            override fun onAnimationStart() {
+                binding.ytOverlay.visibility = View.VISIBLE
+            }
+        })
+        binding.ytOverlay.player(player)
+
+        // Handle touch events
+        playerView.setOnTouchListener { _, motionEvent ->
+            if (!isLocked) {
+                gestureDetectorCompat.onTouchEvent(motionEvent)
+                
+                if (motionEvent.action == MotionEvent.ACTION_UP) {
+                    binding.brightnessIcon.visibility = View.GONE
+                    binding.volumeIcon.visibility = View.GONE
+                }
+            }
+            false
+        }
+    }
+
+    override fun onScroll(
+        e1: MotionEvent?,
+        event: MotionEvent,
+        distanceX: Float,
+        distanceY: Float
+    ): Boolean {
+        minSwipeY += distanceY
+
+        val sWidth = Resources.getSystem().displayMetrics.widthPixels
+        val sHeight = Resources.getSystem().displayMetrics.heightPixels
+
+        val border = 100 * Resources.getSystem().displayMetrics.density.toInt()
+        if (event.x < border || event.y < border || 
+            event.x > sWidth - border || event.y > sHeight - border)
+            return false
+
+        if (abs(distanceX) < abs(distanceY) && abs(minSwipeY) > 50) {
+            if (event.x < sWidth / 2) {
+                // Brightness control
+                binding.brightnessIcon.visibility = View.VISIBLE
+                binding.volumeIcon.visibility = View.GONE
+                val increase = distanceY > 0
+                val newValue = if (increase) brightness + 1 else brightness - 1
+                if (newValue in 0..30) brightness = newValue
+                binding.brightnessIcon.text = brightness.toString()
+                setScreenBrightness(brightness)
+            } else {
+                // Volume control
+                binding.brightnessIcon.visibility = View.GONE
+                binding.volumeIcon.visibility = View.VISIBLE
+                val maxVolume = audioManager!!.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val increase = distanceY > 0
+                val newValue = if (increase) volume + 1 else volume - 1
+                if (newValue in 0..maxVolume) volume = newValue
+                binding.volumeIcon.text = volume.toString()
+                audioManager!!.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
+            }
+            minSwipeY = 0f
+        }
+        return true
+    }
+
+    private fun setScreenBrightness(value: Int) {
+        val d = 1.0f / 30
+        val lp = window.attributes
+        lp.screenBrightness = d * value
+        window.attributes = lp
+    }
+
+    // Add other required GestureDetector.OnGestureListener methods
+    override fun onDown(e: MotionEvent) = false
+    override fun onShowPress(e: MotionEvent) = Unit
+    override fun onSingleTapUp(e: MotionEvent) = false
+    override fun onLongPress(e: MotionEvent) = Unit
+    override fun onFling(e1: MotionEvent?, e2: MotionEvent, vX: Float, vY: Float) = false
 }
