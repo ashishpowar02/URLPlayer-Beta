@@ -111,6 +111,41 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private var isLocked = false
 
+    // Update supported formats with correct MIME types
+    private val supportedFormats = mapOf(
+        // Common formats
+        "mp4" to "video/mp4",
+        "mkv" to "video/x-matroska",
+        "webm" to "video/webm",
+        "3gp" to "video/3gpp",
+        
+        // Transport streams
+        "ts" to "video/mp2t",
+        "mts" to "video/mp2t",
+        "m2ts" to "video/mp2t",
+        
+        // Streaming formats
+        "m3u8" to "application/x-mpegURL",
+        "m3u" to "application/x-mpegURL",
+        
+        // Additional formats
+        "avi" to "video/avi",
+        "mov" to "video/quicktime",
+        "wmv" to "video/x-ms-wmv",
+        "flv" to "video/x-flv",
+        
+        // Legacy formats
+        "mp2" to "video/mpeg",
+        "mpg" to "video/mpeg",
+        "mpeg" to "video/mpeg"
+    )
+
+    private var isPlaying = false
+
+    // Add these properties
+    private var position: Int = -1
+    private var playerList: ArrayList<String> = ArrayList()
+
     companion object {
         private const val INCREMENT_MILLIS = 5000L
         var pipStatus: Int = 0
@@ -336,6 +371,42 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 dialog.dismiss()
                 showQualityDialog()
             }
+
+            // Add PiP button click handler
+            bindingMF.pipModeBtn.setOnClickListener {
+                val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+                val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    appOps.checkOpNoThrow(
+                        AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                        android.os.Process.myUid(),
+                        packageName
+                    ) == AppOpsManager.MODE_ALLOWED
+                } else {
+                    false
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    if (status) {
+                        // Enter PiP mode
+                        enterPictureInPictureMode(PictureInPictureParams.Builder().build())
+                        dialog.dismiss()
+                        binding.playerView.hideController()
+                        playVideo()
+                        pipStatus = 0
+                    } else {
+                        // Open PiP settings if not enabled
+                        val intent = Intent(
+                            "android.settings.PICTURE_IN_PICTURE_SETTINGS",
+                            Uri.parse("package:$packageName")
+                        )
+                        startActivity(intent)
+                    }
+                } else {
+                    Toast.makeText(this, "Feature Not Supported!!", Toast.LENGTH_SHORT).show()
+                    dialog.dismiss()
+                    playVideo()
+                }
+            }
         }
 
         // Lock button
@@ -351,13 +422,27 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     // Add helper methods for video control
     private fun playVideo() {
-        player.play()
-        playPauseButton.setImageResource(R.drawable.pause_icon)
+        if (!isPlayerReady) return
+        
+        try {
+            player.play()
+            isPlaying = true
+            updatePlayPauseButton(true)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error playing video: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun pauseVideo() {
-        player.pause()
-        playPauseButton.setImageResource(R.drawable.play_icon)
+        if (isPlaying) {
+            try {
+                player.pause()
+                isPlaying = false
+                updatePlayPauseButton(false)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Error pausing video: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun toggleOrientation() {
@@ -567,78 +652,150 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     }
 
     private fun setupPlayer() {
-        if (::player.isInitialized) {
-            player.release()
-        }
-
-        trackSelector = DefaultTrackSelector(this).apply {
-            setParameters(buildUponParameters().setMaxVideoSizeSd())
-        }
-
-        player = ExoPlayer.Builder(this)
-            .setTrackSelector(trackSelector)
-            .setSeekBackIncrementMs(INCREMENT_MILLIS)
-            .setSeekForwardIncrementMs(INCREMENT_MILLIS)
-            .build()
-
-        // Set player to playerView
-        playerView.player = player
-
-        // Setup media source
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
-
-        val mediaItem = MediaItem.fromUri(Uri.parse(url))
-        val mediaSource = when {
-            url?.endsWith(".m3u8", ignoreCase = true) == true -> {
-                HlsMediaSource.Factory(dataSourceFactory)
-                    .createMediaSource(mediaItem)
+        try {
+            if (::player.isInitialized) {
+                player.release()
             }
-            url?.endsWith(".mp4", ignoreCase = true) == true -> {
-                // MP4 video
-                val mp4MediaItem = MediaItem.Builder()
-                    .setUri(Uri.parse(url))
-                    .setMimeType(MimeTypes.APPLICATION_MP4)
-                    .build()
-                ProgressiveMediaSource.Factory(dataSourceFactory)
-                    .createMediaSource(mp4MediaItem)
+
+            trackSelector = DefaultTrackSelector(this).apply {
+                setParameters(buildUponParameters().setMaxVideoSizeSd())
             }
-            else -> {
-                // Try to play as progressive download
-                ProgressiveMediaSource.Factory(dataSourceFactory)
-                    .createMediaSource(mediaItem)
-            }
-        }
 
-        player.setMediaSource(mediaSource)
-        player.seekTo(playbackPosition)
-        player.playWhenReady = true
-        player.prepare()
+            player = ExoPlayer.Builder(this)
+                .setTrackSelector(trackSelector)
+                .build()
 
-        setupPlayerListeners()
-    }
+            playerView.player = player
 
-    private fun setupPlayerListeners() {
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY && !isPlayerReady) {
-                    isPlayerReady = true
-                    progressBar.visibility = View.GONE
+            // Create data source factory
+            val dataSourceFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
+
+            // Create media source based on file extension
+            val mediaItem = MediaItem.fromUri(url ?: return)
+            val mediaSource = when {
+                url?.endsWith(".m3u8", ignoreCase = true) == true -> {
+                    // HLS stream
+                    HlsMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(mediaItem)
+                }
+                else -> {
+                    // Get file extension
+                    val extension = url?.substringAfterLast('.', "")?.lowercase() ?: ""
+                    
+                    // Create appropriate media item with mime type
+                    val mimeType = supportedFormats[extension]
+                    val finalMediaItem = if (mimeType != null) {
+                        MediaItem.Builder()
+                            .setUri(Uri.parse(url))
+                            .setMimeType(mimeType)
+                            .build()
+                    } else {
+                        mediaItem
+                    }
+
+                    // Create progressive media source
+                    ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(finalMediaItem)
                 }
             }
 
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                playPauseButton.setImageResource(
-                    if (isPlaying) R.drawable.pause_icon
-                    else R.drawable.play_icon
-                )
-            }
+            player.setMediaSource(mediaSource)
+            player.seekTo(playbackPosition)
+            player.playWhenReady = true
+            player.prepare()
 
-            override fun onPlayerError(error: PlaybackException) {
-                errorTextView.visibility = View.VISIBLE
-                progressBar.visibility = View.GONE
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    when (state) {
+                        Player.STATE_BUFFERING -> {
+                            progressBar.visibility = View.VISIBLE
+                            updatePlayPauseButton(false)
+                        }
+                        Player.STATE_READY -> {
+                            progressBar.visibility = View.GONE
+                            isPlayerReady = true
+                            if (isPlaying) {
+                                player.play()
+                            }
+                        }
+                        Player.STATE_ENDED -> {
+                            updatePlayPauseButton(false)
+                            handlePlaybackEnded()
+                        }
+                        Player.STATE_IDLE -> {
+                            updatePlayPauseButton(false)
+                        }
+                    }
+                }
+
+                override fun onIsPlayingChanged(playing: Boolean) {
+                    isPlaying = playing
+                    updatePlayPauseButton(playing)
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    // Show error message
+                    errorTextView.visibility = View.VISIBLE
+                    errorTextView.text = "Error: ${error.message}"
+                }
+            })
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Error initializing player: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun updatePlayPauseButton(isPlaying: Boolean) {
+        playPauseButton.setImageResource(
+            if (isPlaying) R.drawable.pause_icon
+            else R.drawable.play_icon
+        )
+    }
+
+    private fun handlePlaybackEnded() {
+        when (player.repeatMode) {
+            Player.REPEAT_MODE_ONE -> {
+                // Just replay current video
+                player.seekTo(0)
+                playVideo()
             }
-        })
+            Player.REPEAT_MODE_ALL -> {
+                // For single video, treat same as REPEAT_MODE_ONE
+                player.seekTo(0)
+                playVideo()
+            }
+            else -> {
+                // Just stop at the end
+                pauseVideo()
+                // Optionally show replay button or end screen
+                showPlaybackEndedUI()
+            }
+        }
+    }
+
+    private fun showPlaybackEndedUI() {
+        try {
+            // Show replay button with fallback to play icon
+            playPauseButton.setImageResource(
+                try {
+                    R.drawable.replay_icon
+                } catch (e: Exception) {
+                    R.drawable.play_icon // Fallback to play icon
+                }
+            )
+            
+            playPauseButton.setOnClickListener {
+                player.seekTo(0)
+                playVideo()
+                // Restore normal play/pause listener
+                setupCustomControllerActions()
+            }
+        } catch (e: Exception) {
+            // If anything fails, just show play icon
+            playPauseButton.setImageResource(R.drawable.play_icon)
+        }
     }
 
     private fun updateQualityInfo() {
@@ -692,6 +849,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             AudioManager.AUDIOFOCUS_GAIN
         )
         if (brightness != 0) setScreenBrightness(brightness)
+        if (isPlaying) {
+            playVideo()
+        }
     }
 
     override fun onPause() {
@@ -699,6 +859,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         if (Util.SDK_INT <= 23) {
             playbackPosition = player.currentPosition
             player.playWhenReady = false
+        }
+        if (isPlaying) {
+            pauseVideo()
         }
     }
 
@@ -727,6 +890,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode)
+        
         if (pipStatus != 0) {
             finish()
             val intent = Intent(this, PlayerActivity::class.java)
@@ -737,8 +901,23 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             }
             startActivity(intent)
         }
+        
         if (!isInPictureInPictureMode) {
             pauseVideo() // Pause video when exiting PiP mode
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!isInPictureInPictureMode) {
+                // Auto enter PiP when user leaves activity
+                try {
+                    enterPictureInPictureMode(PictureInPictureParams.Builder().build())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
     }
 
