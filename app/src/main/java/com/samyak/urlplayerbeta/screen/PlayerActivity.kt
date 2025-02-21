@@ -55,6 +55,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
+import android.media.audiofx.LoudnessEnhancer
+import com.samyak.urlplayerbeta.databinding.BoosterBinding
 
 class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -146,6 +148,12 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private var position: Int = -1
     private var playerList: ArrayList<String> = ArrayList()
 
+    // Add these properties if not already present
+    private lateinit var loudnessEnhancer: LoudnessEnhancer
+    private var boostLevel: Int = 0
+    private var isBoostEnabled: Boolean = false
+    private val maxBoostLevel = 15 // Maximum boost level (1500%)
+
     companion object {
         private const val INCREMENT_MILLIS = 5000L
         var pipStatus: Int = 0
@@ -177,6 +185,12 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
         setupPlayer()
         setupGestureControls()
+
+        // Restore saved boost level
+        boostLevel = getSharedPreferences("audio_settings", Context.MODE_PRIVATE)
+            .getInt("boost_level", 0)
+        isBoostEnabled = getSharedPreferences("audio_settings", Context.MODE_PRIVATE)
+            .getBoolean("boost_enabled", false)
     }
 
     private fun initializeViews() {
@@ -281,132 +295,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         // More Features button
         moreFeaturesButton.setOnClickListener {
             pauseVideo()
-            val customDialog = LayoutInflater.from(this)
-                .inflate(R.layout.more_features, null, false)
-            val bindingMF = MoreFeaturesBinding.bind(customDialog)
-            val dialog = MaterialAlertDialogBuilder(this)
-                .setView(customDialog)
-                .setOnCancelListener { playVideo() }
-                .setBackground(ColorDrawable(0x803700B3.toInt()))
-                .create()
-            dialog.show()
-
-            // Add subtitle button click listener
-            bindingMF.subtitlesBtn.setOnClickListener {
-                dialog.dismiss()
-                playVideo()
-                val subtitles = ArrayList<String>()
-                val subtitlesList = ArrayList<String>()
-                var hasSubtitles = false
-                
-                // Get available subtitle tracks
-                try {
-                    for (group in player.currentTracksInfo.trackGroupInfos) {
-                        if (group.trackType == C.TRACK_TYPE_TEXT) {
-                            hasSubtitles = true
-                            val groupInfo = group.trackGroup
-                            for (i in 0 until groupInfo.length) {
-                                val format = groupInfo.getFormat(i)
-                                val language = format.language ?: "unknown"
-                                val label = format.label ?: Locale(language).displayLanguage
-                                
-                                subtitles.add(language)
-                                subtitlesList.add(
-                                    "${subtitlesList.size + 1}. $label" + 
-                                    if (language != "unknown") " (${Locale(language).displayLanguage})" else ""
-                                )
-                            }
-                        }
-                    }
-
-                    if (!hasSubtitles) {
-                        Toast.makeText(this, "No subtitles available for this video", Toast.LENGTH_SHORT).show()
-                        return@setOnClickListener
-                    }
-
-                    val tempTracks = subtitlesList.toArray(arrayOfNulls<CharSequence>(subtitlesList.size))
-                    
-                    MaterialAlertDialogBuilder(this, R.style.SubtitleDialogStyle)
-                        .setTitle("Select Subtitles")
-                        .setOnCancelListener { playVideo() }
-                        .setPositiveButton("Off Subtitles") { self, _ ->
-                            trackSelector.setParameters(
-                                trackSelector.buildUponParameters()
-                                    .setRendererDisabled(C.TRACK_TYPE_TEXT, true)
-                            )
-                            self.dismiss()
-                            playVideo()
-                            Snackbar.make(playerView, "Subtitles disabled", 3000).show()
-                        }
-                        .setItems(tempTracks) { _, position ->
-                            try {
-                                trackSelector.setParameters(
-                                    trackSelector.buildUponParameters()
-                                        .setRendererDisabled(C.TRACK_TYPE_TEXT, false)
-                                        .setPreferredTextLanguage(subtitles[position])
-                                )
-                                Snackbar.make(
-                                    playerView,
-                                    "Selected: ${subtitlesList[position]}", 
-                                    3000
-                                ).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(this, "Error selecting subtitles", Toast.LENGTH_SHORT).show()
-                            }
-                            playVideo()
-                        }
-                        .setBackground(ColorDrawable(0x803700B3.toInt()))
-                        .create()
-                        .apply {
-                            show()
-                            getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.WHITE)
-                        }
-                } catch (e: Exception) {
-                    Toast.makeText(this, "Error loading subtitles", Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            // Video Quality button in more features dialog
-            bindingMF.videoQuality.setOnClickListener {
-                dialog.dismiss()
-                showQualityDialog()
-            }
-
-            // Add PiP button click handler
-            bindingMF.pipModeBtn.setOnClickListener {
-                val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-                val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    appOps.checkOpNoThrow(
-                        AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
-                        android.os.Process.myUid(),
-                        packageName
-                    ) == AppOpsManager.MODE_ALLOWED
-                } else {
-                    false
-                }
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    if (status) {
-                        // Enter PiP mode
-                        enterPictureInPictureMode(PictureInPictureParams.Builder().build())
-                        dialog.dismiss()
-                        binding.playerView.hideController()
-                        playVideo()
-                        pipStatus = 0
-                    } else {
-                        // Open PiP settings if not enabled
-                        val intent = Intent(
-                            "android.settings.PICTURE_IN_PICTURE_SETTINGS",
-                            Uri.parse("package:$packageName")
-                        )
-                        startActivity(intent)
-                    }
-                } else {
-                    Toast.makeText(this, "Feature Not Supported!!", Toast.LENGTH_SHORT).show()
-                    dialog.dismiss()
-                    playVideo()
-                }
-            }
+            showMoreFeaturesDialog()
         }
 
         // Lock button
@@ -417,6 +306,143 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 if (isLocked) R.drawable.close_lock_icon 
                 else R.drawable.lock_open_icon
             )
+        }
+    }
+
+    private fun showMoreFeaturesDialog() {
+        val customDialog = LayoutInflater.from(this)
+            .inflate(R.layout.more_features, binding.root, false)
+        val bindingMF = MoreFeaturesBinding.bind(customDialog)
+        
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setView(customDialog)
+            .setOnCancelListener { playVideo() }
+            .setBackground(ColorDrawable(0x803700B3.toInt()))
+            .create()
+        
+        dialog.show()
+
+        // Handle audio booster click
+        bindingMF.audioBooster.setOnClickListener {
+            dialog.dismiss()
+            showAudioBoosterDialog()
+        }
+
+        // Add subtitle button click listener
+        bindingMF.subtitlesBtn.setOnClickListener {
+            dialog.dismiss()
+            playVideo()
+            val subtitles = ArrayList<String>()
+            val subtitlesList = ArrayList<String>()
+            var hasSubtitles = false
+            
+            // Get available subtitle tracks
+            try {
+                for (group in player.currentTracksInfo.trackGroupInfos) {
+                    if (group.trackType == C.TRACK_TYPE_TEXT) {
+                        hasSubtitles = true
+                        val groupInfo = group.trackGroup
+                        for (i in 0 until groupInfo.length) {
+                            val format = groupInfo.getFormat(i)
+                            val language = format.language ?: "unknown"
+                            val label = format.label ?: Locale(language).displayLanguage
+                            
+                            subtitles.add(language)
+                            subtitlesList.add(
+                                "${subtitlesList.size + 1}. $label" + 
+                                if (language != "unknown") " (${Locale(language).displayLanguage})" else ""
+                            )
+                        }
+                    }
+                }
+
+                if (!hasSubtitles) {
+                    Toast.makeText(this, "No subtitles available for this video", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                val tempTracks = subtitlesList.toArray(arrayOfNulls<CharSequence>(subtitlesList.size))
+                
+                MaterialAlertDialogBuilder(this, R.style.SubtitleDialogStyle)
+                    .setTitle("Select Subtitles")
+                    .setOnCancelListener { playVideo() }
+                    .setPositiveButton("Off Subtitles") { self, _ ->
+                        trackSelector.setParameters(
+                            trackSelector.buildUponParameters()
+                                .setRendererDisabled(C.TRACK_TYPE_TEXT, true)
+                        )
+                        self.dismiss()
+                        playVideo()
+                        Snackbar.make(playerView, "Subtitles disabled", 3000).show()
+                    }
+                    .setItems(tempTracks) { _, position ->
+                        try {
+                            trackSelector.setParameters(
+                                trackSelector.buildUponParameters()
+                                    .setRendererDisabled(C.TRACK_TYPE_TEXT, false)
+                                    .setPreferredTextLanguage(subtitles[position])
+                            )
+                            Snackbar.make(
+                                playerView,
+                                "Selected: ${subtitlesList[position]}", 
+                                3000
+                            ).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Error selecting subtitles", Toast.LENGTH_SHORT).show()
+                        }
+                        playVideo()
+                    }
+                    .setBackground(ColorDrawable(0x803700B3.toInt()))
+                    .create()
+                    .apply {
+                        show()
+                        getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.WHITE)
+                    }
+            } catch (e: Exception) {
+                Toast.makeText(this, "Error loading subtitles", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Video Quality button in more features dialog
+        bindingMF.videoQuality.setOnClickListener {
+            dialog.dismiss()
+            showQualityDialog()
+        }
+
+        // Add PiP button click handler
+        bindingMF.pipModeBtn.setOnClickListener {
+            val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                appOps.checkOpNoThrow(
+                    AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                    android.os.Process.myUid(),
+                    packageName
+                ) == AppOpsManager.MODE_ALLOWED
+            } else {
+                false
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (status) {
+                    // Enter PiP mode
+                    enterPictureInPictureMode(PictureInPictureParams.Builder().build())
+                    dialog.dismiss()
+                    binding.playerView.hideController()
+                    playVideo()
+                    pipStatus = 0
+                } else {
+                    // Open PiP settings if not enabled
+                    val intent = Intent(
+                        "android.settings.PICTURE_IN_PICTURE_SETTINGS",
+                        Uri.parse("package:$packageName")
+                    )
+                    startActivity(intent)
+                }
+            } else {
+                Toast.makeText(this, "Feature Not Supported!!", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+                playVideo()
+            }
         }
     }
 
@@ -741,6 +767,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 }
             })
 
+            // Initialize audio booster
+            setupAudioBooster()
+
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "Error initializing player: ${e.message}", Toast.LENGTH_LONG).show()
@@ -877,6 +906,13 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         super.onDestroy()
         player.release()
         audioManager?.abandonAudioFocus(null)
+        try {
+            if (::loudnessEnhancer.isInitialized) {
+                loudnessEnhancer.release()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -1016,4 +1052,115 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     override fun onSingleTapUp(e: MotionEvent) = false
     override fun onLongPress(e: MotionEvent) = Unit
     override fun onFling(e1: MotionEvent?, e2: MotionEvent, vX: Float, vY: Float) = false
+
+    private fun setupAudioBooster() {
+        try {
+            // Create new LoudnessEnhancer with player's audio session
+            loudnessEnhancer = LoudnessEnhancer(player.audioSessionId)
+            
+            // Restore saved settings
+            val prefs = getSharedPreferences("audio_settings", Context.MODE_PRIVATE)
+            boostLevel = prefs.getInt("boost_level", 0)
+            isBoostEnabled = prefs.getBoolean("boost_enabled", false)
+            
+            // Apply saved settings
+            loudnessEnhancer.enabled = isBoostEnabled
+            if (isBoostEnabled && boostLevel > 0) {
+                loudnessEnhancer.setTargetGain(boostLevel * 100) // Convert to millibels
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error initializing audio booster", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
+        }
+    }
+
+    private fun showAudioBoosterDialog() {
+        val customDialogB = LayoutInflater.from(this)
+            .inflate(R.layout.booster, binding.root, false)
+        val bindingB = BoosterBinding.bind(customDialogB)
+        
+        // Set initial values
+        bindingB.verticalBar.apply {
+            progress = boostLevel
+            // The max value should be set in XML via app:vsb_max_value="15"
+        }
+        
+        val dialogB = MaterialAlertDialogBuilder(this)
+            .setView(customDialogB)
+            .setTitle("Audio Boost")
+            .setOnCancelListener { playVideo() }
+            .setPositiveButton("Apply") { self, _ ->
+                try {
+                    // Update boost level
+                    boostLevel = bindingB.verticalBar.progress
+                    isBoostEnabled = boostLevel > 0
+                    
+                    // Apply settings
+                    loudnessEnhancer.enabled = isBoostEnabled
+                    loudnessEnhancer.setTargetGain(boostLevel * 100)
+                    
+                    // Save settings
+                    getSharedPreferences("audio_settings", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("boost_level", boostLevel)
+                        .putBoolean("boost_enabled", isBoostEnabled)
+                        .apply()
+
+                    // Show feedback
+                    val message = if (isBoostEnabled) 
+                        "Audio boost set to ${boostLevel * 10}%" 
+                    else 
+                        "Audio boost disabled"
+                    Snackbar.make(binding.root, message, Snackbar.LENGTH_SHORT).show()
+                    
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Error setting audio boost", Toast.LENGTH_SHORT).show()
+                    e.printStackTrace()
+                }
+                playVideo()
+                self.dismiss()
+            }
+            .setNegativeButton("Reset") { _, _ ->
+                try {
+                    // Reset all settings
+                    boostLevel = 0
+                    isBoostEnabled = false
+                    bindingB.verticalBar.progress = 0
+                    loudnessEnhancer.enabled = false
+                    loudnessEnhancer.setTargetGain(0)
+                    
+                    // Save reset state
+                    getSharedPreferences("audio_settings", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("boost_level", 0)
+                        .putBoolean("boost_enabled", false)
+                        .apply()
+                        
+                    Snackbar.make(binding.root, "Audio boost reset", Snackbar.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Error resetting audio boost", Toast.LENGTH_SHORT).show()
+                    e.printStackTrace()
+                }
+            }
+            .create()
+
+        // Update progress text function
+        fun updateProgressText(progress: Int) {
+            val percentage = progress * 10
+            bindingB.progressText.text = if (progress > 0) {
+                "Audio Boost\n\n+${percentage}%"
+            } else {
+                "Audio Boost\n\nOff"
+            }
+        }
+        
+        updateProgressText(boostLevel)
+
+        // Update progress text while sliding
+        bindingB.verticalBar.setOnProgressChangeListener { progress ->
+            updateProgressText(progress)
+        }
+
+        dialogB.show()
+    }
 }
