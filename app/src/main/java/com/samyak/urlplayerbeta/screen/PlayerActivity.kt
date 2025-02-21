@@ -51,6 +51,10 @@ import com.google.android.exoplayer2.video.VideoSize
 import com.samyak.urlplayerbeta.databinding.MoreFeaturesBinding
 import kotlin.math.abs
 import com.samyak.urlplayerbeta.databinding.ActivityPlayerBinding
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 
 class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -74,7 +78,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private var playbackPosition = 0L
     private var isPlayerReady = false
-    private var isFullScreen = false
+    private var isFullscreen: Boolean = false
     private var url: String? = null
     private var userAgent: String? = null
     private lateinit var trackSelector: DefaultTrackSelector
@@ -135,6 +139,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         gestureDetectorCompat = GestureDetectorCompat(this, this)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         volume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+
+        setupPlayer()
+        setupGestureControls()
     }
 
     private fun initializeViews() {
@@ -227,7 +234,13 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
         // Fullscreen button
         fullScreenButton.setOnClickListener {
-            toggleFullscreen()
+            if (isFullscreen) {
+                isFullscreen = false
+                playInFullscreen(enable = false)
+            } else {
+                isFullscreen = true
+                playInFullscreen(enable = true)
+            }
         }
 
         // More Features button
@@ -355,18 +368,15 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         }
     }
 
-    private fun toggleFullscreen() {
-        isFullScreen = !isFullScreen
-        fullScreenButton.setImageResource(
-            if (isFullScreen) R.drawable.fullscreen_exit_icon
-            else R.drawable.fullscreen_icon
-        )
-        if (isFullScreen) {
-            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                    or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
+    private fun playInFullscreen(enable: Boolean) {
+        if (enable) {
+            binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+            fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
         } else {
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+            fullScreenButton.setImageResource(R.drawable.fullscreen_icon)
         }
     }
 
@@ -673,6 +683,15 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         if (Util.SDK_INT <= 23 || !isPlayerReady) {
             player.playWhenReady = true
         }
+        if (audioManager == null) {
+            audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        }
+        audioManager?.requestAudioFocus(
+            null,
+            AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN
+        )
+        if (brightness != 0) setScreenBrightness(brightness)
     }
 
     override fun onPause() {
@@ -694,6 +713,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     override fun onDestroy() {
         super.onDestroy()
         player.release()
+        audioManager?.abandonAudioFocus(null)
     }
 
     @Deprecated("Deprecated in Java")
@@ -722,9 +742,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         }
     }
 
-    @SuppressLint("ClickableViewAccessibility") 
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupGestureControls() {
-        playerView.player = player
+        binding.playerView.player = player
         
         // Setup YouTube style overlay
         binding.ytOverlay.performListener(object : YouTubeOverlay.PerformListener {
@@ -739,13 +759,21 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         binding.ytOverlay.player(player)
 
         // Handle touch events
-        playerView.setOnTouchListener { _, motionEvent ->
+        binding.playerView.setOnTouchListener { _, motionEvent ->
             if (!isLocked) {
                 gestureDetectorCompat.onTouchEvent(motionEvent)
                 
                 if (motionEvent.action == MotionEvent.ACTION_UP) {
                     binding.brightnessIcon.visibility = View.GONE
                     binding.volumeIcon.visibility = View.GONE
+                    
+                    // For immersive mode
+                    WindowCompat.setDecorFitsSystemWindows(window, false)
+                    WindowInsetsControllerCompat(window, binding.root).let { controller ->
+                        controller.hide(WindowInsetsCompat.Type.systemBars())
+                        controller.systemBarsBehavior = 
+                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    }
                 }
             }
             false
@@ -758,6 +786,8 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         distanceX: Float,
         distanceY: Float
     ): Boolean {
+        if (isLocked) return false
+        
         minSwipeY += distanceY
 
         val sWidth = Resources.getSystem().displayMetrics.widthPixels
