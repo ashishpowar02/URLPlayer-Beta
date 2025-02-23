@@ -1,8 +1,6 @@
 package com.samyak.urlplayerbeta.screen
 
-import android.net.Uri
 import android.os.Bundle
-import android.util.Patterns
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -11,6 +9,7 @@ import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
 import com.samyak.urlplayerbeta.R
+import com.samyak.urlplayerbeta.models.Videos
 
 class URLActivity : AppCompatActivity() {
     private lateinit var titleEditText: EditText
@@ -60,8 +59,10 @@ class URLActivity : AppCompatActivity() {
             setDisplayShowHomeEnabled(true)
             title = getString(R.string.add_url)
         }
-       toolbar.setTitleTextColor(ContextCompat.getColor(this, R.color.white))
-
+        toolbar.setTitleTextColor(ContextCompat.getColor(this, R.color.white))
+        
+        // Set navigation icon color to white
+        toolbar.navigationIcon?.setTint(ContextCompat.getColor(this, R.color.white))
     }
 
     private fun initializeViews() {
@@ -188,10 +189,26 @@ class URLActivity : AppCompatActivity() {
                 return
             }
 
+            // Create Videos object
+            val video = Videos(
+                name = title,
+                url = url,
+                userAgent = if (userAgent.isNotEmpty()) userAgent else null
+            )
+
             // Add new channel with URL type detection
             val urlType = detectUrlType(url)
             val newLinks = currentLinks.toMutableSet()
-            newLinks.add("$title###$url###$urlType${if (userAgent.isNotEmpty()) "###$userAgent" else ""}")
+            
+            // Format: title###url###urlType###userAgent
+            val channelData = buildString {
+                append("${video.name}###${video.url}###$urlType")
+                if (!video.userAgent.isNullOrEmpty()) {
+                    append("###${video.userAgent}")
+                }
+            }
+            
+            newLinks.add(channelData)
             
             // Save to SharedPreferences
             sharedPreferences.edit().apply {

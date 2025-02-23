@@ -105,7 +105,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun contactUs() {
         val intent = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("mailto:support@yourdomain.com")
+            data = Uri.parse("mailto:arrowwouldpro@gmail.com")
             putExtra(Intent.EXTRA_SUBJECT, getString(R.string.email_subject))
         }
         try {

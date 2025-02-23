@@ -9,6 +9,7 @@
     <string name="save">SAVE</string>
 
     <!-- Error Messages -->
+    <string name="error_invalid_user_agent">User agent is too short or invalid</string>
     <string name="error_title_required">Title is required</string>
     <string name="error_title_too_short">Title must be at least 3 characters</string>
     <string name="error_title_exists">A channel with this title already exists</string>
@@ -68,7 +69,7 @@
     <string name="privacy_policy">Privacy Policy</string>
     <string name="contact_us">Contact Us</string>
     <string name="share_message">Share via</string>
-    <string name="email_subject">YTV PRO Feedback</string>
+    <string name="email_subject">URL Player Beta Feedback</string>
     <string name="error_privacy_policy">Unable to open privacy policy</string>
     <string name="error_no_email">No email app found</string>
 

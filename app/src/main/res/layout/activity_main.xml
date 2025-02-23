@@ -130,6 +130,11 @@
         android:fitsSystemWindows="true"
         android:background="@color/white"
         app:headerLayout="@layout/nav_header"
+        app:itemIconSize="28dp"
+        app:itemIconPadding="24dp"
+        app:itemVerticalPadding="16dp"
+        app:itemHorizontalPadding="24dp"
+        app:itemTextAppearance="@style/NavDrawerTextStyle"
         app:itemIconTint="@color/Red"
         app:itemTextColor="@color/black"
         app:menu="@menu/drawer_menu"/>

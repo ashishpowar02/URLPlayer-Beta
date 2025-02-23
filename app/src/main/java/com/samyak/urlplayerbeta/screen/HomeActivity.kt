@@ -81,7 +81,7 @@ class HomeActivity : AppCompatActivity() {
         window.apply {
             clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
             addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-            statusBarColor = getColor(R.color.black)
+            statusBarColor = getColor(R.color.Red)
         }
     }
 
@@ -93,9 +93,31 @@ class HomeActivity : AppCompatActivity() {
             channelList.clear()
             links.forEach { link ->
                 link.split("###").let { parts ->
-                    when (parts.size) {
-                        2 -> channelList.add(Videos(parts[0], parts[1], ""))
-                        3 -> channelList.add(Videos(parts[0], parts[1], parts[2]))
+                    when {
+                        parts.size >= 4 -> {
+                            // Format: title###url###urlType###userAgent
+                            channelList.add(Videos(
+                                name = parts[0],
+                                url = parts[1],
+                                userAgent = parts[3]
+                            ))
+                        }
+                        parts.size == 3 -> {
+                            // Format: title###url###urlType
+                            channelList.add(Videos(
+                                name = parts[0],
+                                url = parts[1],
+                                userAgent = null
+                            ))
+                        }
+                        parts.size == 2 -> {
+                            // Old format: title###url
+                            channelList.add(Videos(
+                                name = parts[0],
+                                url = parts[1],
+                                userAgent = null
+                            ))
+                        }
                     }
                 }
             }
@@ -109,7 +131,7 @@ class HomeActivity : AppCompatActivity() {
             // Show empty state if needed
             updateEmptyState()
         } catch (e: Exception) {
-//            Toast.makeText(this, getString(R.string.error_loading_channels), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Error loading channels: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 

@@ -7,9 +7,11 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
 import com.samyak.urlplayerbeta.R
+import com.samyak.urlplayerbeta.models.Videos
 
 class UpdateActivity : AppCompatActivity() {
     private lateinit var titleEditText: EditText
@@ -40,6 +42,10 @@ class UpdateActivity : AppCompatActivity() {
             setDisplayShowHomeEnabled(true)
             title = getString(R.string.update_channel)
         }
+        
+        // Set both title and navigation icon color to white
+        toolbar.setTitleTextColor(ContextCompat.getColor(this, R.color.white))
+        toolbar.navigationIcon?.setTint(ContextCompat.getColor(this, R.color.white))
     }
 
     private fun initializeViews() {
@@ -113,6 +119,27 @@ class UpdateActivity : AppCompatActivity() {
                url.startsWith("rtp://")
     }
 
+    private fun detectUrlType(url: String): String {
+        val lowercaseUrl = url.lowercase()
+        return when {
+            lowercaseUrl.endsWith(".m3u8") -> "HLS"
+            lowercaseUrl.endsWith(".mp4") -> "MP4"
+            lowercaseUrl.endsWith(".avi") -> "AVI"
+            lowercaseUrl.endsWith(".mkv") -> "MKV"
+            lowercaseUrl.endsWith(".m3u") -> "M3U"
+            lowercaseUrl.endsWith(".ts") -> "TS"
+            lowercaseUrl.endsWith(".mov") -> "MOV"
+            lowercaseUrl.endsWith(".webm") -> "WEBM"
+            lowercaseUrl.startsWith("rtmp://") -> "RTMP"
+            lowercaseUrl.startsWith("rtsp://") -> "RTSP"
+            lowercaseUrl.startsWith("udp://") -> "UDP"
+            lowercaseUrl.startsWith("rtp://") -> "RTP"
+            lowercaseUrl.startsWith("mms://") -> "MMS"
+            lowercaseUrl.startsWith("srt://") -> "SRT"
+            else -> "HTTP"
+        }
+    }
+
     private fun updateChannel() {
         try {
             val title = titleEditText.text.toString().trim()
@@ -126,8 +153,16 @@ class UpdateActivity : AppCompatActivity() {
             // Remove old entry
             newLinks.removeIf { it.startsWith("$originalTitle###") }
 
-            // Add updated entry
-            newLinks.add("$title###$url${if (userAgent.isNotEmpty()) "###$userAgent" else ""}")
+            // Create Videos object
+            val video = Videos(
+                name = title,
+                url = url,
+                userAgent = if (userAgent.isNotEmpty()) userAgent else null
+            )
+
+            // Add updated entry with URL type
+            val urlType = detectUrlType(url)
+            newLinks.add("${video.name}###${video.url}###$urlType${if (!video.userAgent.isNullOrEmpty()) "###${video.userAgent}" else ""}")
 
             // Save changes
             sharedPreferences.edit().apply {

@@ -17,14 +17,12 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageButton
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
@@ -35,7 +33,6 @@ import com.google.android.exoplayer2.source.ProgressiveMediaSource
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector
 import com.google.android.exoplayer2.ui.PlayerView
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
-import com.google.android.exoplayer2.util.MimeTypes
 import com.google.android.exoplayer2.util.Util
 import com.samyak.urlplayerbeta.R
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -45,9 +42,7 @@ import android.media.AudioManager
 import android.content.res.Resources
 import android.view.GestureDetector
 import androidx.core.view.GestureDetectorCompat
-import androidx.core.view.MotionEventCompat
 import com.github.vkay94.dtpv.youtube.YouTubeOverlay
-import com.google.android.exoplayer2.video.VideoSize
 import com.samyak.urlplayerbeta.databinding.MoreFeaturesBinding
 import kotlin.math.abs
 import com.samyak.urlplayerbeta.databinding.ActivityPlayerBinding

@@ -1,9 +1,8 @@
 package com.samyak.urlplayerbeta.adapters
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
+
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -29,6 +28,16 @@ class ChannelAdapter(
                     // Set text views with null checks
                     tvChannelName.text = item.name.orEmpty()
                     tvChannelLink.text = item.url.orEmpty()
+
+                    // Handle user agent visibility and text
+                    if (!item.userAgent.isNullOrEmpty()) {
+                        userAgentText.apply {
+                            visibility = View.VISIBLE
+                            text = "User Agent: ${item.userAgent}"
+                        }
+                    } else {
+                        userAgentText.visibility = View.GONE
+                    }
 
                     // Edit button click with position validation
                     editButton.setOnClickListener {
