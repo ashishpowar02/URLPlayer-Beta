@@ -6,5 +6,6 @@
     <color name="text_color">#000000</color>
     <color name="yellow">#FFC107</color>
     <color name="Red">#F8144F</color>
+    <color name="textColor">#616161</color>
     <color name="transparent">@android:color/transparent</color>
 </resources>

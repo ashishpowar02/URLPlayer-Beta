@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
 import com.samyak.urlplayerbeta.R
@@ -40,6 +41,10 @@ class UpdateActivity : AppCompatActivity() {
             setDisplayShowHomeEnabled(true)
             title = getString(R.string.update_channel)
         }
+        
+        // Set both title and navigation icon color to white
+        toolbar.setTitleTextColor(ContextCompat.getColor(this, R.color.white))
+        toolbar.navigationIcon?.setTint(ContextCompat.getColor(this, R.color.white))
     }
 
     private fun initializeViews() {

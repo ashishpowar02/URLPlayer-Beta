@@ -60,8 +60,10 @@ class URLActivity : AppCompatActivity() {
             setDisplayShowHomeEnabled(true)
             title = getString(R.string.add_url)
         }
-       toolbar.setTitleTextColor(ContextCompat.getColor(this, R.color.white))
-
+        toolbar.setTitleTextColor(ContextCompat.getColor(this, R.color.white))
+        
+        // Set navigation icon color to white
+        toolbar.navigationIcon?.setTint(ContextCompat.getColor(this, R.color.white))
     }
 
     private fun initializeViews() {

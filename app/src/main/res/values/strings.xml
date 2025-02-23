@@ -9,6 +9,7 @@
     <string name="save">SAVE</string>
 
     <!-- Error Messages -->
+    <string name="error_invalid_user_agent">User agent is too short or invalid</string>
     <string name="error_title_required">Title is required</string>
     <string name="error_title_too_short">Title must be at least 3 characters</string>
     <string name="error_title_exists">A channel with this title already exists</string>
