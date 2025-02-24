@@ -64,9 +64,8 @@ URL Player Beta is an Android application that allows users to play online video
     <td><img src="image/9.png" alt="Screenshot 9" width="250px"></td>  
   </tr> 
 </table>
-<td><img src="image/9.gif" alt="Screenshot
 
----  
+
 
 ## Installation
 
