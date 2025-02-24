@@ -1,36 +1,83 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/item_layout"
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/cardView2"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="16dp"
-    android:background="@drawable/edittext_background"
-    android:layout_marginBottom="8dp">
+    android:layout_margin="4dp"
+    app:cardCornerRadius="8dp">
 
-    <TextView
-        android:id="@+id/tvChannelName"
-        android:layout_width="wrap_content"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="16sp"
-        android:textColor="@color/text_color"
-        android:textStyle="bold" />
+        android:padding="6dp">
 
-    <TextView
-        android:id="@+id/tvChannelLink"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textSize="14sp"
-        android:textColor="@color/text_color"
-        android:layout_below="@id/tvChannelName"
-        android:layout_marginTop="4dp" />
+        <ImageView
+            android:id="@+id/URLplayerBeta"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/player_beta"
+            android:contentDescription="@null"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
-    <androidx.appcompat.widget.AppCompatButton
-        android:id="@+id/edit_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Edit"
-        android:background="@drawable/button_background_6"
-        android:textColor="@color/button_text_color"
-        android:layout_alignParentEnd="true"
-        android:layout_centerVertical="true" />
-</RelativeLayout>
+        <TextView
+            android:id="@+id/tvChannelName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="8dp"
+            android:text="PlumberName"
+            android:textColor="@color/black"
+            android:textSize="14sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            app:layout_constraintEnd_toStartOf="@+id/edit_button"
+            app:layout_constraintStart_toEndOf="@+id/URLplayerBeta"
+            app:layout_constraintTop_toTopOf="@+id/URLplayerBeta" />
+
+        <TextView
+            android:id="@+id/tvChannelLink"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="https"
+            android:textColor="@color/textColor"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            app:layout_constraintEnd_toEndOf="@+id/tvChannelName"
+            app:layout_constraintStart_toStartOf="@+id/tvChannelName"
+            app:layout_constraintTop_toBottomOf="@+id/tvChannelName" />
+
+        <TextView
+            android:id="@+id/userAgentText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="sam"
+            android:textColor="@color/textColor"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            app:layout_constraintEnd_toEndOf="@+id/tvChannelName"
+            app:layout_constraintStart_toStartOf="@+id/tvChannelName"
+            app:layout_constraintTop_toBottomOf="@+id/tvChannelLink" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/edit_button"
+            android:layout_width="60dp"
+            android:layout_height="28dp"
+            android:background="@drawable/button_background_3"
+            android:text="Edit"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="12sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/URLplayerBeta" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.cardview.widget.CardView>
