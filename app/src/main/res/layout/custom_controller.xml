@@ -42,6 +42,14 @@
             android:textSize="16sp"
             android:textStyle="bold" />
 
+        <androidx.mediarouter.app.MediaRouteButton
+            android:id="@+id/mediaRouteButton"
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:mediaRouteTypes="user"
+            android:visibility="visible"
+            app:mediaRouteButtonTint="@color/white" />
+
         <ImageButton
             android:id="@+id/moreFeaturesBtn"
             android:layout_width="50dp"

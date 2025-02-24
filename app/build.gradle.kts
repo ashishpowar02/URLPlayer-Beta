@@ -86,4 +86,8 @@ dependencies {
     implementation("de.hdodenhof:circleimageview:3.1.0")
 
     implementation("androidx.lifecycle:lifecycle-extensions:2.2.0") // For older versions of LiveData
+
+    // Add Cast dependencies
+    implementation("com.google.android.gms:play-services-cast-framework:21.4.0")
+    implementation("androidx.mediarouter:mediarouter:1.6.0")
 }

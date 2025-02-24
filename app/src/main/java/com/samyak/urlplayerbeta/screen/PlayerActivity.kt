@@ -52,6 +52,13 @@ import androidx.core.view.WindowInsetsCompat
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 import android.media.audiofx.LoudnessEnhancer
 import com.samyak.urlplayerbeta.databinding.BoosterBinding
+import androidx.mediarouter.app.MediaRouteButton
+import com.google.android.gms.cast.MediaInfo
+import com.google.android.gms.cast.MediaLoadRequestData
+import com.google.android.gms.cast.MediaMetadata
+import com.google.android.gms.cast.framework.*
+import com.google.android.gms.cast.framework.media.RemoteMediaClient
+import com.google.android.gms.common.images.WebImage
 
 class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -108,33 +115,44 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private var isLocked = false
 
-    // Update supported formats with correct MIME types
+    // Update supported formats with comprehensive streaming formats
     private val supportedFormats = mapOf(
-        // Common formats
+        // Common video formats
         "mp4" to "video/mp4",
         "mkv" to "video/x-matroska",
         "webm" to "video/webm",
         "3gp" to "video/3gpp",
-        
-        // Transport streams
-        "ts" to "video/mp2t",
-        "mts" to "video/mp2t",
-        "m2ts" to "video/mp2t",
-        
-        // Streaming formats
-        "m3u8" to "application/x-mpegURL",
-        "m3u" to "application/x-mpegURL",
-        
-        // Additional formats
-        "avi" to "video/avi",
+        "avi" to "video/x-msvideo",
         "mov" to "video/quicktime",
         "wmv" to "video/x-ms-wmv",
         "flv" to "video/x-flv",
         
+        // Streaming formats
+        "m3u8" to "application/x-mpegURL",
+        "m3u" to "application/x-mpegURL",
+        "ts" to "video/MP2T",
+        "mpd" to "application/dash+xml",
+        "ism" to "application/vnd.ms-sstr+xml",
+        
+        // Transport stream formats
+        "ts" to "video/mp2t",
+        "mts" to "video/mp2t",
+        "m2ts" to "video/mp2t",
+        
         // Legacy formats
         "mp2" to "video/mpeg",
         "mpg" to "video/mpeg",
-        "mpeg" to "video/mpeg"
+        "mpeg" to "video/mpeg",
+        
+        // Additional streaming formats
+        "hls" to "application/x-mpegURL",
+        "dash" to "application/dash+xml",
+        "smooth" to "application/vnd.ms-sstr+xml",
+        
+        // Playlist formats
+        "pls" to "audio/x-scpls",
+        "asx" to "video/x-ms-asf",
+        "xspf" to "application/xspf+xml"
     )
 
     private var isPlaying = false
@@ -150,9 +168,59 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private val maxBoostLevel = 15 // Maximum boost level (1500%)
 
+    // Add these properties for casting
+    private lateinit var castContext: CastContext
+    private lateinit var sessionManager: SessionManager
+    private var castSession: CastSession? = null
+    private lateinit var mediaRouteButton: MediaRouteButton
+
+    private val castSessionManagerListener = object : SessionManagerListener<CastSession> {
+        override fun onSessionStarting(session: CastSession) {}
+        
+        override fun onSessionStarted(session: CastSession, sessionId: String) {
+            castSession = session
+            // Save current playback position
+            val position = player.currentPosition
+            // Start casting
+            loadRemoteMedia(position)
+            // Pause local playback
+            player.pause()
+        }
+        
+        override fun onSessionStartFailed(session: CastSession, error: Int) {
+            Toast.makeText(this@PlayerActivity, "Failed to start casting", Toast.LENGTH_SHORT).show()
+        }
+        
+        override fun onSessionEnding(session: CastSession) {
+            // Return to local playback
+            val position = session.remoteMediaClient?.approximateStreamPosition ?: 0
+            player.seekTo(position)
+            player.playWhenReady = true
+        }
+        
+        override fun onSessionEnded(session: CastSession, error: Int) {
+            castSession = null
+        }
+        
+        override fun onSessionResuming(session: CastSession, sessionId: String) {}
+        override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) {
+            castSession = session
+        }
+        override fun onSessionResumeFailed(session: CastSession, error: Int) {}
+        override fun onSessionSuspended(session: CastSession, reason: Int) {}
+    }
+
     companion object {
         private const val INCREMENT_MILLIS = 5000L
         var pipStatus: Int = 0
+    }
+
+    // Add these properties at the top of the class
+    private var playbackState = PlaybackState.IDLE
+    private var wasPlayingBeforePause = false
+
+    private enum class PlaybackState {
+        IDLE, PLAYING, PAUSED, BUFFERING, ENDED
     }
 
     @SuppressLint("SourceLockedOrientationActivity")
@@ -187,6 +255,14 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             .getInt("boost_level", 0)
         isBoostEnabled = getSharedPreferences("audio_settings", Context.MODE_PRIVATE)
             .getBoolean("boost_enabled", false)
+
+        // Initialize cast context
+        try {
+            castContext = CastContext.getSharedInstance(this)
+            sessionManager = castContext.sessionManager
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun initializeViews() {
@@ -222,6 +298,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             val channelName = intent.getStringExtra("CHANNEL_NAME") ?: getString(R.string.video_name)
             videoTitle.text = channelName
             videoTitle.isSelected = true
+
+            // Add cast button setup
+            mediaRouteButton = playerView.findViewById(R.id.mediaRouteButton)
+            CastButtonFactory.setUpMediaRouteButton(this, mediaRouteButton)
+
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "Error setting up controller views", Toast.LENGTH_SHORT).show()
@@ -236,12 +317,17 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
         // Play/Pause button
         playPauseButton.setOnClickListener {
-            if (player.isPlaying) {
-                player.pause()
-                playPauseButton.setImageResource(R.drawable.play_icon)
-            } else {
-                player.play()
-                playPauseButton.setImageResource(R.drawable.pause_icon)
+            when (playbackState) {
+                PlaybackState.PLAYING -> pauseVideo()
+                PlaybackState.PAUSED, PlaybackState.ENDED -> playVideo()
+                PlaybackState.BUFFERING -> {
+                    wasPlayingBeforePause = !wasPlayingBeforePause
+                    updatePlayPauseButton(wasPlayingBeforePause)
+                }
+                else -> {
+                    // Try to start playback for other states
+                    playVideo()
+                }
             }
         }
 
@@ -442,28 +528,49 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         }
     }
 
-    // Add helper methods for video control
+    // Update the playVideo() method
     private fun playVideo() {
         if (!isPlayerReady) return
         
         try {
-            player.play()
-            isPlaying = true
-            updatePlayPauseButton(true)
+            when (playbackState) {
+                PlaybackState.PAUSED, PlaybackState.ENDED -> {
+                    player.play()
+                    playbackState = PlaybackState.PLAYING
+                    isPlaying = true
+                    updatePlayPauseButton(true)
+                }
+                PlaybackState.BUFFERING -> {
+                    wasPlayingBeforePause = true
+                }
+                else -> {
+                    // Do nothing for other states
+                }
+            }
         } catch (e: Exception) {
             Toast.makeText(this, "Error playing video: ${e.message}", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
         }
     }
 
+    // Update the pauseVideo() method
     private fun pauseVideo() {
-        if (isPlaying) {
-            try {
-                player.pause()
-                isPlaying = false
-                updatePlayPauseButton(false)
-            } catch (e: Exception) {
-                Toast.makeText(this, "Error pausing video: ${e.message}", Toast.LENGTH_SHORT).show()
+        try {
+            when (playbackState) {
+                PlaybackState.PLAYING, PlaybackState.BUFFERING -> {
+                    player.pause()
+                    playbackState = PlaybackState.PAUSED
+                    isPlaying = false
+                    updatePlayPauseButton(false)
+                    wasPlayingBeforePause = true
+                }
+                else -> {
+                    // Do nothing for other states
+                }
             }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error pausing video: ${e.message}", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
         }
     }
 
@@ -692,21 +799,24 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             // Create data source factory
             val dataSourceFactory = DefaultHttpDataSource.Factory()
                 .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
+                .setAllowCrossProtocolRedirects(true)
 
-            // Create media source based on file extension
+            // Create media source based on URL type
             val mediaItem = MediaItem.fromUri(url ?: return)
             val mediaSource = when {
-                url?.endsWith(".m3u8", ignoreCase = true) == true -> {
-                    // HLS stream
+                // HLS streams
+                url?.endsWith(".m3u8", ignoreCase = true) == true ||
+                url?.endsWith(".m3u", ignoreCase = true) == true ||
+                url?.endsWith(".hls", ignoreCase = true) == true -> {
                     HlsMediaSource.Factory(dataSourceFactory)
                         .createMediaSource(mediaItem)
                 }
+                
+                // Progressive streams
                 else -> {
-                    // Get file extension
                     val extension = url?.substringAfterLast('.', "")?.lowercase() ?: ""
-                    
-                    // Create appropriate media item with mime type
                     val mimeType = supportedFormats[extension]
+                    
                     val finalMediaItem = if (mimeType != null) {
                         MediaItem.Builder()
                             .setUri(Uri.parse(url))
@@ -716,7 +826,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                         mediaItem
                     }
 
-                    // Create progressive media source
                     ProgressiveMediaSource.Factory(dataSourceFactory)
                         .createMediaSource(finalMediaItem)
                 }
@@ -727,25 +836,33 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             player.playWhenReady = true
             player.prepare()
 
+            // Add player listener
             player.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     when (state) {
                         Player.STATE_BUFFERING -> {
+                            playbackState = PlaybackState.BUFFERING
                             progressBar.visibility = View.VISIBLE
-                            updatePlayPauseButton(false)
+                            updatePlayPauseButton(wasPlayingBeforePause)
                         }
                         Player.STATE_READY -> {
                             progressBar.visibility = View.GONE
                             isPlayerReady = true
-                            if (isPlaying) {
+                            if (wasPlayingBeforePause) {
+                                playbackState = PlaybackState.PLAYING
                                 player.play()
+                            } else {
+                                playbackState = PlaybackState.PAUSED
                             }
+                            updatePlayPauseButton(wasPlayingBeforePause)
                         }
                         Player.STATE_ENDED -> {
+                            playbackState = PlaybackState.ENDED
                             updatePlayPauseButton(false)
                             handlePlaybackEnded()
                         }
                         Player.STATE_IDLE -> {
+                            playbackState = PlaybackState.IDLE
                             updatePlayPauseButton(false)
                         }
                     }
@@ -753,6 +870,12 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
                 override fun onIsPlayingChanged(playing: Boolean) {
                     isPlaying = playing
+                    if (playing) {
+                        playbackState = PlaybackState.PLAYING
+                    } else if (playbackState != PlaybackState.BUFFERING && 
+                               playbackState != PlaybackState.ENDED) {
+                        playbackState = PlaybackState.PAUSED
+                    }
                     updatePlayPauseButton(playing)
                 }
 
@@ -760,6 +883,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     // Show error message
                     errorTextView.visibility = View.VISIBLE
                     errorTextView.text = "Error: ${error.message}"
+                    
+                    // Log the error
+                    error.printStackTrace()
                 }
             })
 
@@ -877,6 +1003,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         if (isPlaying) {
             playVideo()
         }
+        if (::sessionManager.isInitialized) {
+            sessionManager.addSessionManagerListener(castSessionManagerListener, CastSession::class.java)
+        }
     }
 
     override fun onPause() {
@@ -887,6 +1016,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         }
         if (isPlaying) {
             pauseVideo()
+        }
+        if (::sessionManager.isInitialized) {
+            sessionManager.removeSessionManagerListener(castSessionManagerListener, CastSession::class.java)
         }
     }
 
@@ -1158,5 +1290,49 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         }
 
         dialogB.show()
+    }
+
+    private fun loadRemoteMedia(position: Long = 0) {
+        val castSession = castSession ?: return
+        val remoteMediaClient = castSession.remoteMediaClient ?: return
+        
+        try {
+            // Create media metadata
+            val videoMetadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE)
+            videoMetadata.putString(MediaMetadata.KEY_TITLE, 
+                intent.getStringExtra("CHANNEL_NAME") ?: getString(R.string.video_name))
+            
+            // Create media info
+            val mediaInfo = MediaInfo.Builder(url ?: return)
+                .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+                .setContentType(getMimeType(url))
+                .setMetadata(videoMetadata)
+                .build()
+            
+            // Load media
+            val loadRequestData = MediaLoadRequestData.Builder()
+                .setMediaInfo(mediaInfo)
+                .setAutoplay(true)
+                .setCurrentTime(position)
+                .build()
+            
+            remoteMediaClient.load(loadRequestData)
+                .addStatusListener { 
+                    if (it.isSuccess) {
+                        Toast.makeText(this, "Casting started", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "Failed to start casting", Toast.LENGTH_SHORT).show()
+                    }
+                }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error starting cast: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun getMimeType(url: String?): String {
+        return url?.let { uri ->
+            val extension = uri.substringAfterLast('.', "").lowercase()
+            supportedFormats[extension] ?: "video/mp4"
+        } ?: "video/mp4"
     }
 }
