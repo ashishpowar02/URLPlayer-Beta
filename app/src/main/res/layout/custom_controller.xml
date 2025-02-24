@@ -90,6 +90,8 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
+        <!-- Comment out or remove the orientation button -->
+        <!--
         <ImageButton
             android:id="@+id/orientationBtn"
             android:layout_width="45dp"
@@ -98,6 +100,7 @@
             android:contentDescription="@string/orientation"
             android:src="@drawable/orientation_icon"
             app:tint="@color/white" />
+        -->
 
         <ImageButton
             android:id="@+id/repeatBtn"

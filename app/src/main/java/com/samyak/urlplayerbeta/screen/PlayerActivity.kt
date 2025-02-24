@@ -59,6 +59,10 @@ import com.google.android.gms.cast.MediaMetadata
 import com.google.android.gms.cast.framework.*
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import com.google.android.gms.common.images.WebImage
+import android.view.Gravity
+import android.util.TypedValue
+import android.widget.FrameLayout
+import com.google.android.exoplayer2.ui.CaptionStyleCompat
 
 class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -74,7 +78,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var videoTitle: TextView
     private lateinit var moreFeaturesButton: ImageButton
     private lateinit var playPauseButton: ImageButton
-    private lateinit var orientationButton: ImageButton
     private lateinit var repeatButton: ImageButton
     private lateinit var prevButton: ImageButton
     private lateinit var nextButton: ImageButton
@@ -174,6 +177,10 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private var castSession: CastSession? = null
     private lateinit var mediaRouteButton: MediaRouteButton
 
+    // Add after other properties
+    private var screenHeight: Int = 0
+    private var screenWidth: Int = 0
+
     private val castSessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {}
         
@@ -228,6 +235,17 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         super.onCreate(savedInstanceState)
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Force landscape orientation
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+
+        // Hide system bars and make fullscreen
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, binding.root).let { controller ->
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = 
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -288,7 +306,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             videoTitle = playerView.findViewById(R.id.videoTitle)
             moreFeaturesButton = playerView.findViewById(R.id.moreFeaturesBtn)
             playPauseButton = playerView.findViewById(R.id.playPauseBtn)
-            orientationButton = playerView.findViewById(R.id.orientationBtn)
             repeatButton = playerView.findViewById(R.id.repeatBtn)
             prevButton = playerView.findViewById(R.id.prevBtn)
             nextButton = playerView.findViewById(R.id.nextBtn)
@@ -356,11 +373,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     repeatButton.setImageResource(R.drawable.repeat_off_icon)
                 }
             }
-        }
-
-        // Orientation button
-        orientationButton.setOnClickListener {
-            toggleOrientation()
         }
 
         // Fullscreen button
@@ -571,14 +583,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         } catch (e: Exception) {
             Toast.makeText(this, "Error pausing video: ${e.message}", Toast.LENGTH_SHORT).show()
             e.printStackTrace()
-        }
-    }
-
-    private fun toggleOrientation() {
-        requestedOrientation = if (resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
     }
 
@@ -892,6 +896,17 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             // Initialize audio booster
             setupAudioBooster()
 
+            // Apply subtitle styling after player is created
+            applySubtitleStyle()
+            
+            // Add configuration change listener for subtitle resizing
+            player.addListener(object : Player.Listener {
+                override fun onSurfaceSizeChanged(width: Int, height: Int) {
+                    // Recalculate subtitle size when surface size changes
+                    applySubtitleStyle()
+                }
+            })
+
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "Error initializing player: ${e.message}", Toast.LENGTH_LONG).show()
@@ -961,14 +976,24 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
-            supportActionBar?.hide()
-        } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-            supportActionBar?.show()
+        
+        // Always force landscape mode
+        if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
+
+        // Keep fullscreen in both orientations
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, binding.root).let { controller ->
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = 
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        // Reset screen dimensions and recalculate subtitle size
+        screenWidth = 0
+        screenHeight = 0
+        applySubtitleStyle()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -1045,11 +1070,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        } else {
-            super.onBackPressed()
-        }
+        super.onBackPressed()
+        // Just finish the activity when back is pressed
+        finish()
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
@@ -1334,5 +1357,63 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             val extension = uri.substringAfterLast('.', "").lowercase()
             supportedFormats[extension] ?: "video/mp4"
         } ?: "video/mp4"
+    }
+
+    // Add this function to calculate optimal subtitle size
+    private fun calculateSubtitleSize(): Float {
+        // Get screen dimensions if not already set
+        if (screenHeight == 0 || screenWidth == 0) {
+            val metrics = resources.displayMetrics
+            screenHeight = metrics.heightPixels
+            screenWidth = metrics.widthPixels
+        }
+
+        // Base size calculation on screen width
+        // For 1080p width, default size would be 20sp
+        val baseSize = 20f
+        val baseWidth = 1080f
+        
+        // Calculate scaled size based on screen width
+        val scaledSize = (screenWidth / baseWidth) * baseSize
+        
+        // Clamp the size between min and max values
+        return scaledSize.coerceIn(16f, 26f)
+    }
+
+    // Add this function to apply subtitle styling
+    private fun applySubtitleStyle() {
+        try {
+            val subtitleSize = calculateSubtitleSize()
+            
+            // Create subtitle style
+            val style = CaptionStyleCompat(
+                Color.WHITE,                      // Text color
+                Color.TRANSPARENT,                // Background color
+                Color.TRANSPARENT,                // Window color
+                CaptionStyleCompat.EDGE_TYPE_OUTLINE, // Edge type
+                Color.BLACK,                      // Edge color
+                null                             // Default typeface
+            )
+
+            // Apply style to player view
+            playerView.subtitleView?.setStyle(style)
+            
+            // Set text size
+            playerView.subtitleView?.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, subtitleSize)
+            
+            // Center align subtitles and position them slightly above bottom
+            playerView.subtitleView?.let { subtitleView ->
+                subtitleView.setApplyEmbeddedStyles(true)
+                subtitleView.setApplyEmbeddedFontSizes(false)
+                
+                // Position subtitles slightly above bottom (90% from top)
+                val params = subtitleView.layoutParams as FrameLayout.LayoutParams
+                params.gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+                params.bottomMargin = (screenHeight * 0.1).toInt() // 10% from bottom
+                subtitleView.layoutParams = params
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
