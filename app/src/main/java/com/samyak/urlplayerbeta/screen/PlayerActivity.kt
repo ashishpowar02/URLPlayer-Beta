@@ -147,6 +147,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var loudnessEnhancer: LoudnessEnhancer
     private var boostLevel: Int = 0
     private var isBoostEnabled: Boolean = false
+
     private val maxBoostLevel = 15 // Maximum boost level (1500%)
 
     companion object {

@@ -8,4 +8,5 @@ data class Videos(
     val name: String, 
     val url: String,
     val userAgent: String? = null
+
 ) : Parcelable
