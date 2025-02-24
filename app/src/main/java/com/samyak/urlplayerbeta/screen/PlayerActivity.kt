@@ -230,6 +230,14 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         IDLE, PLAYING, PAUSED, BUFFERING, ENDED
     }
 
+    // Add this enum at the top of the class
+    private enum class ScreenMode {
+        FIT, FILL, ZOOM
+    }
+
+    // Add this property to track current screen mode
+    private var currentScreenMode = ScreenMode.FIT
+
     @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -377,11 +385,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
         // Fullscreen button
         fullScreenButton.setOnClickListener {
-            if (isFullscreen) {
-                isFullscreen = false
-                playInFullscreen(enable = false)
-            } else {
+            if (!isFullscreen) {
                 isFullscreen = true
+                playInFullscreen(enable = true)
+            } else {
+                // Cycle through modes when already fullscreen
                 playInFullscreen(enable = true)
             }
         }
@@ -586,15 +594,47 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         }
     }
 
+    // Update the playInFullscreen function
     private fun playInFullscreen(enable: Boolean) {
         if (enable) {
-            binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
-            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-            fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
+            when (currentScreenMode) {
+                ScreenMode.FIT -> {
+                    // Default fit mode
+                    binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                    fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
+                    currentScreenMode = ScreenMode.FILL
+                }
+                ScreenMode.FILL -> {
+                    // Stretch to fill
+                    binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                    player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                    fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
+                    currentScreenMode = ScreenMode.ZOOM
+                }
+                ScreenMode.ZOOM -> {
+                    // Zoom and crop
+                    binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                    fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
+                    currentScreenMode = ScreenMode.FIT
+                }
+            }
+            
+            // Show toast with current mode
+//            val modeText = when (currentScreenMode) {
+//                ScreenMode.FIT -> "Fit to Screen"
+//                ScreenMode.FILL -> "Fill Screen"
+//                ScreenMode.ZOOM -> "Zoom"
+//            }
+//            Toast.makeText(this, modeText, Toast.LENGTH_SHORT).show()
+            
         } else {
+            // Reset to default fit mode
             binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
             fullScreenButton.setImageResource(R.drawable.fullscreen_icon)
+            currentScreenMode = ScreenMode.FIT
         }
     }
 
