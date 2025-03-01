@@ -7,5 +7,5 @@
         <item name="android:statusBarColor">@color/Red</item>
     </style>
 
-    <style name="Theme.URLPlayerBeta" parent="Base.Theme.URLPlayerBeta" />
+   
 </resources>

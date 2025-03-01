@@ -1,49 +1,74 @@
 # Changelog
 
-## [1.1.0] - 2024-03-21
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+### Attempted Changes
+- Attempted to implement interstitial ads on back button press in PlayerActivity and HomeActivity
+  - Implementation was proposed but not merged
+  - Would have added double-back press exit mechanism with ads in HomeActivity
+  - Would have added interstitial ads on back press in PlayerActivity
+
+### Known Issues
+- Need to determine optimal ad display strategy that balances user experience and monetization
+- Back button behavior needs further refinement
+
+## [1.0.1] - 2024-03-XX
 
 ### Added
-- Google Cast Support
-  - Added Chromecast integration
-  - Cast button in player controls
-  - Seamless playback transition between device and Cast
-  - Cast status notifications
-  - Support for all streaming formats on Cast devices
+- New About section in navigation drawer
+- About activity with app information and version details
+- White navigation arrow in toolbar headers
+- ProGuard rules for app optimization
+- Improved error handling in HomeActivity
+- Background processing for channel loading
+- View recycling optimization in RecyclerView
+- Asynchronous ad loading
+- Better memory management
 
-### Enhanced
-- Improved Media Format Support
-  - Added HLS streaming (.m3u8, .m3u, .hls)
-  - Added DASH streaming (.mpd)
-  - Added Smooth Streaming (.ism)
-  - Added Transport Stream formats (.ts, .mts, .m2ts)
-  - Added additional playlist formats (.pls, .asx, .xspf)
-
-- Playback Control Improvements
-  - Enhanced play/pause state management
-  - Better buffering state handling
-  - Improved error recovery
-  - Smoother state transitions
-  - Fixed edge cases in playback control
-
-### Technical
-- Added Cast dependencies
-  - Google Play Services Cast Framework
-  - MediaRouter support library
-- Added CastOptionsProvider for Cast configuration
-- Enhanced MIME type support for various formats
-- Improved error handling and logging
-
-### UI/UX
-- Added Cast button with white tint
-- Improved playback state visual feedback
-- Better error messages and notifications
-- Seamless Cast device selection dialog
+### Changed
+- Optimized HomeActivity performance
+- Improved ad loading mechanism
+- Enhanced RecyclerView efficiency
+- Updated toolbar styling
+- Reduced main thread operations
+- Better error handling in adapters
+- More efficient list operations
 
 ### Fixed
-- Play/pause state inconsistencies
-- Buffering state visual feedback
-- Media format detection issues
-- Playback transition edge cases
+- Lag issues in HomeActivity
+- Memory leaks in RecyclerView
+- UI freezing during channel loading
+- Toolbar navigation icon visibility
+- Ad loading delays
+- Channel list update performance
+
+### Technical Improvements
+- Added ProGuard optimization rules
+- Implemented background thread for channel processing
+- Enhanced view binding usage
+- Improved error tracking
+- Better state management
+- More efficient resource handling
+- Optimized app size through ProGuard rules
+
+### Developer Notes
+- Added comprehensive ProGuard rules
+- Improved code organization
+- Enhanced debugging capabilities
+- Better error logging
+- More consistent error handling
+- Improved code documentation
 
 ## [1.0.0] - Initial Release
-- Base video player functionality 
+
+### Features
+- URL/Stream playback support
+- Channel management
+- Ad integration
+- Custom video player
+- Navigation drawer
+- Channel list with edit capabilities 

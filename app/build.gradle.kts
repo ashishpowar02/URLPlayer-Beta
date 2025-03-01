@@ -12,8 +12,8 @@ android {
         applicationId = "com.samyak.urlplayerbeta"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.2"
+        versionCode = 2
+        versionName = "1.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -83,6 +83,10 @@ dependencies {
 
 //    //Toast
 //    implementation("com.github.samyak2403:TastyToasts:1.0.2")
+
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
+
+    implementation ("com.facebook.shimmer:shimmer:0.5.0")
 
     implementation("de.hdodenhof:circleimageview:3.1.0")
 

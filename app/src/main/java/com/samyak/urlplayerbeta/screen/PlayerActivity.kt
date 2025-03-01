@@ -63,6 +63,8 @@ import android.view.Gravity
 import android.util.TypedValue
 import android.widget.FrameLayout
 import com.google.android.exoplayer2.ui.CaptionStyleCompat
+import com.google.android.gms.cast.CastStatusCodes
+import com.samyak.urlplayerbeta.AdManage.Helper
 
 class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -131,14 +133,13 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         "flv" to "video/x-flv",
         
         // Streaming formats
-        "m3u8" to "application/x-mpegURL",
-        "m3u" to "application/x-mpegURL",
-        "ts" to "video/MP2T",
+        "m3u8" to "application/vnd.apple.mpegurl",  // Updated MIME type
+        "m3u" to "application/vnd.apple.mpegurl",   // Updated MIME type
+        "ts" to "video/mp2t",
         "mpd" to "application/dash+xml",
         "ism" to "application/vnd.ms-sstr+xml",
         
         // Transport stream formats
-        "ts" to "video/mp2t",
         "mts" to "video/mp2t",
         "m2ts" to "video/mp2t",
         
@@ -148,7 +149,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         "mpeg" to "video/mpeg",
         
         // Additional streaming formats
-        "hls" to "application/x-mpegURL",
+        "hls" to "application/vnd.apple.mpegurl",  // Updated MIME type
         "dash" to "application/dash+xml",
         "smooth" to "application/vnd.ms-sstr+xml",
         
@@ -180,6 +181,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     // Add after other properties
     private var screenHeight: Int = 0
     private var screenWidth: Int = 0
+
+    // Add at the top with other properties
+    private lateinit var adHelper: Helper
 
     private val castSessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {}
@@ -243,6 +247,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         super.onCreate(savedInstanceState)
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Initialize AdHelper
+        adHelper = Helper(this, binding)
 
         // Force landscape orientation
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -555,10 +562,45 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         try {
             when (playbackState) {
                 PlaybackState.PAUSED, PlaybackState.ENDED -> {
-                    player.play()
-                    playbackState = PlaybackState.PLAYING
-                    isPlaying = true
-                    updatePlayPauseButton(true)
+                    // Show ad only if video was paused for more than 5 seconds
+                    val currentTime = System.currentTimeMillis()
+                    val lastPauseTime = getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
+                        .getLong("last_pause_time", 0)
+                    val lastAdTime = getSharedPreferences("ad_prefs", Context.MODE_PRIVATE)
+                        .getLong("last_ad_time", 0)
+                    
+                    // Show ad if enough time passed since last pause AND last ad
+                    if (currentTime - lastPauseTime > 5000 && currentTime - lastAdTime > 30000) {
+                        adHelper.showCounterInterstitialAd(
+                            threshold = 3,
+                            onAdShown = {
+                                // Save ad time
+                                getSharedPreferences("ad_prefs", Context.MODE_PRIVATE)
+                                    .edit()
+                                    .putLong("last_ad_time", currentTime)
+                                    .apply()
+                                
+                                // Resume playback after ad is shown
+                                player.play()
+                                playbackState = PlaybackState.PLAYING
+                                isPlaying = true
+                                updatePlayPauseButton(true)
+                            },
+                            onAdNotShown = {
+                                // Play immediately if ad isn't shown
+                                player.play()
+                                playbackState = PlaybackState.PLAYING
+                                isPlaying = true
+                                updatePlayPauseButton(true)
+                            }
+                        )
+                    } else {
+                        // Resume immediately if conditions not met
+                        player.play()
+                        playbackState = PlaybackState.PLAYING
+                        isPlaying = true
+                        updatePlayPauseButton(true)
+                    }
                 }
                 PlaybackState.BUFFERING -> {
                     wasPlayingBeforePause = true
@@ -578,11 +620,52 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         try {
             when (playbackState) {
                 PlaybackState.PLAYING, PlaybackState.BUFFERING -> {
-                    player.pause()
-                    playbackState = PlaybackState.PAUSED
-                    isPlaying = false
-                    updatePlayPauseButton(false)
-                    wasPlayingBeforePause = true
+                    // Save pause time
+                    val currentTime = System.currentTimeMillis()
+                    getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putLong("last_pause_time", currentTime)
+                        .apply()
+
+                    // Get last ad time
+                    val lastAdTime = getSharedPreferences("ad_prefs", Context.MODE_PRIVATE)
+                        .getLong("last_ad_time", 0)
+
+                    // Show ad if enough time passed since last ad
+                    if (currentTime - lastAdTime > 30000) { // 30 seconds between ads
+                        adHelper.showCounterInterstitialAd(
+                            threshold = 3,
+                            onAdShown = {
+                                // Save ad time
+                                getSharedPreferences("ad_prefs", Context.MODE_PRIVATE)
+                                    .edit()
+                                    .putLong("last_ad_time", currentTime)
+                                    .apply()
+                                
+                                // Pause after ad
+                                player.pause()
+                                playbackState = PlaybackState.PAUSED
+                                isPlaying = false
+                                updatePlayPauseButton(false)
+                                wasPlayingBeforePause = true
+                            },
+                            onAdNotShown = {
+                                // Just pause if ad not shown
+                                player.pause()
+                                playbackState = PlaybackState.PAUSED
+                                isPlaying = false
+                                updatePlayPauseButton(false)
+                                wasPlayingBeforePause = true
+                            }
+                        )
+                    } else {
+                        // Pause immediately if too soon for another ad
+                        player.pause()
+                        playbackState = PlaybackState.PAUSED
+                        isPlaying = false
+                        updatePlayPauseButton(false)
+                        wasPlayingBeforePause = true
+                    }
                 }
                 else -> {
                     // Do nothing for other states
@@ -1103,6 +1186,10 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             if (::loudnessEnhancer.isInitialized) {
                 loudnessEnhancer.release()
             }
+            // Clean up ads
+            if (::adHelper.isInitialized) {
+                adHelper.destroy()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -1362,41 +1449,121 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         try {
             // Create media metadata
             val videoMetadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE)
-            videoMetadata.putString(MediaMetadata.KEY_TITLE, 
-                intent.getStringExtra("CHANNEL_NAME") ?: getString(R.string.video_name))
+            val title = intent.getStringExtra("CHANNEL_NAME") ?: getString(R.string.video_name)
+            videoMetadata.putString(MediaMetadata.KEY_TITLE, title)
             
-            // Create media info
+            // Get correct MIME type and stream type
+            val mimeType = getMimeType(url)
+            val streamType = when {
+                // HLS streams
+                url?.contains(".m3u8", ignoreCase = true) == true || 
+                mimeType == "application/vnd.apple.mpegurl" -> 
+                    MediaInfo.STREAM_TYPE_LIVE
+                
+                // DASH streams
+                url?.contains("dash", ignoreCase = true) == true ||
+                mimeType == "application/dash+xml" ->
+                    MediaInfo.STREAM_TYPE_BUFFERED
+                
+                // Progressive streams (MP4, WebM etc)
+                mimeType.startsWith("video/") -> 
+                    MediaInfo.STREAM_TYPE_BUFFERED
+                
+                // Default to buffered
+                else -> MediaInfo.STREAM_TYPE_BUFFERED
+            }
+
+            // Create media info with proper content type and stream type
             val mediaInfo = MediaInfo.Builder(url ?: return)
-                .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
-                .setContentType(getMimeType(url))
+                .setStreamType(streamType)
+                .setContentType(mimeType)
                 .setMetadata(videoMetadata)
+                .apply {
+                    // Only set duration for buffered streams
+                    if (streamType == MediaInfo.STREAM_TYPE_BUFFERED) {
+                        setStreamDuration(player.duration)
+                    }
+                }
                 .build()
             
-            // Load media
+            // Load media with options
             val loadRequestData = MediaLoadRequestData.Builder()
                 .setMediaInfo(mediaInfo)
                 .setAutoplay(true)
-                .setCurrentTime(position)
+                .apply {
+                    // Only set position for buffered streams
+                    if (streamType == MediaInfo.STREAM_TYPE_BUFFERED) {
+                        setCurrentTime(position)
+                    }
+                }
                 .build()
             
+            // Add result listener with enhanced error handling
             remoteMediaClient.load(loadRequestData)
-                .addStatusListener { 
-                    if (it.isSuccess) {
-                        Toast.makeText(this, "Casting started", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this, "Failed to start casting", Toast.LENGTH_SHORT).show()
+                .addStatusListener { result ->
+                    when {
+                        result.isSuccess -> {
+                            Toast.makeText(this, "Casting started", Toast.LENGTH_SHORT).show()
+                            getSharedPreferences("cast_prefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putBoolean("is_casting", true)
+                                .apply()
+                        }
+                        result.isInterrupted -> {
+                            handleCastError("Casting interrupted")
+                        }
+                        else -> {
+                            val errorMsg = when (result.statusCode) {
+                                CastStatusCodes.FAILED -> "Format not supported"
+                                CastStatusCodes.INVALID_REQUEST -> "Invalid stream URL"
+                                CastStatusCodes.NETWORK_ERROR -> "Network error"
+                                CastStatusCodes.APPLICATION_NOT_RUNNING -> "Cast app not running"
+                                else -> "Cast error: ${result.statusCode}"
+                            }
+                            handleCastError(errorMsg)
+                        }
                     }
                 }
         } catch (e: Exception) {
-            Toast.makeText(this, "Error starting cast: ${e.message}", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
+            handleCastError("Cast error: ${e.message}")
         }
     }
 
+    private fun handleCastError(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        // Fallback to local playback
+        castSession?.remoteMediaClient?.stop()
+        player.playWhenReady = true
+        getSharedPreferences("cast_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("is_casting", false)
+            .apply()
+    }
+
     private fun getMimeType(url: String?): String {
-        return url?.let { uri ->
-            val extension = uri.substringAfterLast('.', "").lowercase()
-            supportedFormats[extension] ?: "video/mp4"
-        } ?: "video/mp4"
+        if (url == null) return "video/mp4"
+        
+        return try {
+            // First check for HLS streams
+            if (url.contains(".m3u8", ignoreCase = true) || 
+                url.contains("playlist", ignoreCase = true)) {
+                return "application/vnd.apple.mpegurl"
+            }
+            
+            // Then check file extension
+            val extension = url.substringAfterLast('.', "").lowercase()
+            supportedFormats[extension] ?: when {
+                // Fallback checks for streaming URLs
+                url.contains("dash", ignoreCase = true) -> "application/dash+xml"
+                url.contains("hls", ignoreCase = true) -> "application/vnd.apple.mpegurl"
+                url.contains("smooth", ignoreCase = true) -> "application/vnd.ms-sstr+xml"
+                // Default to MP4 for unknown types
+                else -> "video/mp4"
+            }
+        } catch (e: Exception) {
+            "video/mp4"  // Default fallback
+        }
     }
 
     // Add this function to calculate optimal subtitle size

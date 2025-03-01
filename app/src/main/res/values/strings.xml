@@ -111,4 +111,30 @@
     <string name="quality_changed">Quality changed to %1$s</string>
     <string name="quality_change_failed">Failed to change quality: %1$s</string>
 
+    <!-- Main Activity -->
+    <string name="main_content">Main content</string>
+    <string name="drawer_content">Navigation drawer content</string>
+    <string name="tv_icon">TV icon</string>
+    <string name="online_videos">ONLINE VIDEOS</string>
+
+
+
+    <!-- AdMob Ad Unit IDs -->
+    <string name="admob_interstitial_id">ca-app-pub-3940256099942544/1033173712</string>
+    <string name="admob_banner_id">ca-app-pub-3940256099942544/6300978111</string>
+    <string name="admob_rewarded_interstitial_id">ca-app-pub-3940256099942544/5354046379</string>
+
+    <!-- For testing, you can use these test IDs -->
+<!--    <string name="admob_interstitial_id">ca-app-pub-3940256099942544/1033173712</string>-->
+<!--    <string name="admob_banner_id">ca-app-pub-3940256099942544/6300978111</string>-->
+<!--    <string name="admob_rewarded_interstitial_id">ca-app-pub-3940256099942544/5354046379</string>-->
+
+    <string name="app_logo">App Logo</string>
+    <string name="version">Version %s</string>
+    <string name="version_format">Version %s</string>
+    <string name="developed_by">Developed by</string>
+    <string name="developer_name">Samyak2403\nhttps://github.com/samyak2403</string>
+
+    <string name="about">About</string>
+
 </resources>

@@ -7,5 +7,7 @@
     <color name="yellow">#FFC107</color>
     <color name="Red">#F8144F</color>
     <color name="textColor">#616161</color>
+    <color name="colorNormalBg">#ffffffff</color>
+
     <color name="transparent">@android:color/transparent</color>
 </resources>

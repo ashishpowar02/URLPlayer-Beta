@@ -4,29 +4,123 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.DisplayMetrics
+import android.util.Log
 import android.view.MenuItem
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
+import com.google.android.gms.ads.AdListener
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.initialization.AdapterStatus
 import com.samyak.urlplayerbeta.databinding.ActivityMainBinding
 import com.samyak.urlplayerbeta.screen.HomeActivity
+import com.samyak.urlplayerbeta.AdManage.Helper
+import com.facebook.shimmer.ShimmerFrameLayout
+import com.samyak.urlplayerbeta.screen.AboutActivity
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
-
+    private lateinit var adHelper: Helper
+    private var bannerAd: AdView? = null
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-
+        // Initialize Mobile Ads SDK with enhanced error handling
+        MobileAds.initialize(this) { initializationStatus ->
+            val statusMap = initializationStatus.adapterStatusMap
+            for ((adapterClass, status) in statusMap) {
+                when (status.initializationState) {
+                    AdapterStatus.State.NOT_READY -> {
+                        Log.e(TAG, "Adapter: $adapterClass is not ready.")
+                    }
+                    AdapterStatus.State.READY -> {
+                        Log.d(TAG, "Adapter: $adapterClass is ready.")
+                        loadBannerAd()
+                    }
+                }
+            }
+        }
 
         setupToolbar()
         setupClickListeners()
         setupNavigationDrawer()
+        setupAds()
+    }
+
+    private fun setupAds() {
+        adHelper = Helper(this, binding)
+        adHelper.preloadAds()
+    }
+
+    private fun loadBannerAd() {
+        try {
+            // Start shimmer effect
+            binding.shimmerViewContainer.startShimmer()
+            binding.shimmerViewContainer.visibility = View.VISIBLE
+            binding.bannerAdContainer.visibility = View.GONE
+            
+            val adView = AdView(this)
+            adView.adUnitId = getString(R.string.admob_banner_id)
+            adView.setAdSize(getAdSize())
+            
+            binding.bannerAdContainer.removeAllViews()
+            binding.bannerAdContainer.addView(adView)
+
+            val adRequest = AdRequest.Builder().build()
+            adView.loadAd(adRequest)
+
+            bannerAd = adView
+
+            adView.adListener = object : AdListener() {
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    Log.e(TAG, "Banner ad failed to load: ${error.message}")
+                    // Stop shimmer and hide ad container
+                    binding.shimmerViewContainer.stopShimmer()
+                    binding.shimmerViewContainer.visibility = View.GONE
+                    binding.bannerAdContainer.visibility = View.GONE
+                }
+                
+                override fun onAdLoaded() {
+                    Log.d(TAG, "Banner ad loaded successfully")
+                    // Stop shimmer and show banner ad
+                    binding.shimmerViewContainer.stopShimmer()
+                    binding.shimmerViewContainer.visibility = View.GONE
+                    binding.bannerAdContainer.visibility = View.VISIBLE
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading banner ad: ${e.message}")
+            // Stop shimmer and hide containers
+            binding.shimmerViewContainer.stopShimmer()
+            binding.shimmerViewContainer.visibility = View.GONE
+            binding.bannerAdContainer.visibility = View.GONE
+        }
+    }
+
+    private fun getAdSize(): AdSize {
+        val display = windowManager.defaultDisplay
+        val outMetrics = DisplayMetrics()
+        display.getMetrics(outMetrics)
+
+        val density = outMetrics.density
+        var adWidthPixels = binding.bannerAdContainer.width.toFloat()
+
+        if (adWidthPixels == 0f) {
+            adWidthPixels = outMetrics.widthPixels.toFloat()
+        }
+
+        val adWidth = (adWidthPixels / density).toInt()
+        return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, adWidth)
     }
 
     private fun setupToolbar() {
@@ -41,7 +135,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupClickListeners() {
         binding.openHome.setOnClickListener {
-            startActivity(Intent(this, HomeActivity::class.java))
+            adHelper.showCounterInterstitialAd(
+                threshold = 1,
+                onAdShown = {
+                    startActivity(Intent(this, HomeActivity::class.java))
+                },
+                onAdNotShown = {
+                    startActivity(Intent(this, HomeActivity::class.java))
+                }
+            )
         }
     }
 
@@ -63,6 +165,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 R.id.nav_contact -> {
                     contactUs()
+                    true
+                }
+                R.id.nav_about -> {
+                    startActivity(Intent(this, AboutActivity::class.java))
                     true
                 }
                 else -> false
@@ -128,5 +234,30 @@ class MainActivity : AppCompatActivity() {
         } else {
             super.onBackPressed()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        binding.shimmerViewContainer.startShimmer()
+        if (::adHelper.isInitialized && !adHelper.isAnyAdReady()) {
+            adHelper.preloadAds()
+        }
+    }
+
+    override fun onPause() {
+        binding.shimmerViewContainer.stopShimmer()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        bannerAd?.destroy()
+        if (::adHelper.isInitialized) {
+            adHelper.destroy()
+        }
+    }
+
+    companion object {
+        private const val TAG = "MainActivity"
     }
 }
