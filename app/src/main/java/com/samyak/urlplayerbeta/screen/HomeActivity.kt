@@ -105,25 +105,79 @@ class HomeActivity : AppCompatActivity() {
     private fun initializeAdapter() {
         adapter = ChannelAdapter(
             onPlayClick = { video ->
-                Intent(this, PlayerActivity::class.java).also { intent ->
-                    intent.putExtra("URL", video.url)
-                    intent.putExtra("USER_AGENT", video.userAgent)
-                    startActivity(intent)
-                }
+                launchPlayerActivity(video)
             },
             onEditClick = { video ->
-                Intent(this, UpdateActivity::class.java).also { intent ->
-                    intent.putExtra("TITLE", video.name)
-                    intent.putExtra("URL", video.url)
-                    intent.putExtra("USER_AGENT", video.userAgent)
-                    startActivityForResult(intent, UPDATE_REQUEST_CODE)
-                }
+                launchUpdateActivity(video)
             },
             onError = { message ->
                 Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
             }
         )
         recyclerView.adapter = adapter
+    }
+
+    private fun launchPlayerActivity(video: Videos) {
+        // Show interstitial ad before playing
+        if (adHelper.getAdStatus().interstitialAdReady) {
+            adHelper.showInterstitialAd { result ->
+                when (result) {
+                    is Helper.AdResult.Success -> {
+                        // Ad shown successfully, proceed with launch
+                        startPlayerActivity(video)
+                    }
+                    is Helper.AdResult.Error -> {
+                        // Ad failed to show, proceed directly
+                        startPlayerActivity(video)
+                    }
+                }
+            }
+        } else {
+            // No ad ready, proceed directly
+            startPlayerActivity(video)
+            // Preload for next time
+            adHelper.preloadAds()
+        }
+    }
+
+    private fun startPlayerActivity(video: Videos) {
+        Intent(this, PlayerActivity::class.java).also { intent ->
+            intent.putExtra("URL", video.url)
+            intent.putExtra("USER_AGENT", video.userAgent)
+            startActivity(intent)
+        }
+    }
+
+    private fun launchUpdateActivity(video: Videos) {
+        // Show interstitial ad before editing
+        if (adHelper.getAdStatus().interstitialAdReady) {
+            adHelper.showInterstitialAd { result ->
+                when (result) {
+                    is Helper.AdResult.Success -> {
+                        // Ad shown successfully, proceed with launch
+                        startUpdateActivity(video)
+                    }
+                    is Helper.AdResult.Error -> {
+                        // Ad failed to show, proceed directly
+                        startUpdateActivity(video)
+                    }
+                }
+            }
+        } else {
+            // No ad ready, proceed directly
+            startUpdateActivity(video)
+            // Preload for next time
+            adHelper.preloadAds()
+        }
+    }
+
+    private fun startUpdateActivity(video: Videos) {
+        Intent(this, UpdateActivity::class.java).also { intent ->
+            intent.putExtra("TITLE", video.name)
+            intent.putExtra("URL", video.url)
+            intent.putExtra("USER_AGENT", video.userAgent)
+            startActivityForResult(intent, UPDATE_REQUEST_CODE)
+        }
     }
 
     private fun setupAds() {
