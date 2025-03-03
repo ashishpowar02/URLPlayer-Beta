@@ -27,7 +27,7 @@ class Openads(private val myApplication: Application) : LifecycleObserver,
     private var currentRetryAttempt = 0
 
     private val TAG = "AppOpenAdManager"
-    private val AD_UNIT_ID = "ca-app-pub-3940256099942544/9257395921" // Replace with your actual Ad Unit ID
+    private val AD_UNIT_ID = "ca-app-pub-6211293117600297/6848932650" // Replace with your actual Ad Unit ID
     private val TIMEOUT_DURATION: Long = 4 * 3600000 // 4 hours in milliseconds
 
     init {
