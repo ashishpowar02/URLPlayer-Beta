@@ -24,11 +24,16 @@ import com.samyak.urlplayerbeta.screen.HomeActivity
 import com.samyak.urlplayerbeta.AdManage.Helper
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.samyak.urlplayerbeta.screen.AboutActivity
+import kotlinx.coroutines.*
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var adHelper: Helper
     private var bannerAd: AdView? = null
+    private var adLoadJob: Job? = null
+    private val adScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var adRetryCount = 0
+    private val maxRetries = 3
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +43,8 @@ class MainActivity : AppCompatActivity() {
         // Initialize Mobile Ads SDK with enhanced error handling
         MobileAds.initialize(this) { initializationStatus ->
             val statusMap = initializationStatus.adapterStatusMap
+            var isAnyAdapterReady = false
+            
             for ((adapterClass, status) in statusMap) {
                 when (status.initializationState) {
                     AdapterStatus.State.NOT_READY -> {
@@ -45,9 +52,16 @@ class MainActivity : AppCompatActivity() {
                     }
                     AdapterStatus.State.READY -> {
                         Log.d(TAG, "Adapter: $adapterClass is ready.")
-                        loadBannerAd()
+                        isAnyAdapterReady = true
                     }
                 }
+            }
+            
+            if (isAnyAdapterReady) {
+                loadBannerAdWithTimeout()
+            } else {
+                Log.e(TAG, "No ad adapters are ready")
+                hideAdContainers()
             }
         }
 
@@ -62,13 +76,70 @@ class MainActivity : AppCompatActivity() {
         adHelper.preloadAds()
     }
 
+    private fun loadBannerAdWithTimeout() {
+        // Cancel any existing job
+        adLoadJob?.cancel()
+        
+        // Start shimmer effect
+        binding.shimmerViewContainer.startShimmer()
+        binding.shimmerViewContainer.visibility = View.VISIBLE
+        binding.bannerAdContainer.visibility = View.GONE
+        
+        adLoadJob = adScope.launch {
+            try {
+                // Set a timeout for ad loading
+                withTimeout(10000) { // 10 seconds timeout
+                    loadBannerAd()
+                    // Wait for ad to either load or fail
+                    suspendCancellableCoroutine<Unit> { continuation ->
+                        bannerAd?.adListener = object : AdListener() {
+                            override fun onAdFailedToLoad(error: LoadAdError) {
+                                Log.e(TAG, "Banner ad failed to load: ${error.message}")
+                                if (continuation.isActive) continuation.resume(Unit) {}
+                                
+                                // Retry logic
+                                if (adRetryCount < maxRetries) {
+                                    adRetryCount++
+                                    Log.d(TAG, "Retrying banner ad load (attempt $adRetryCount)")
+                                    adScope.launch {
+                                        delay(1000) // Wait 1 second before retry
+                                        loadBannerAdWithTimeout()
+                                    }
+                                } else {
+                                    hideAdContainers()
+                                }
+                            }
+                            
+                            override fun onAdLoaded() {
+                                Log.d(TAG, "Banner ad loaded successfully")
+                                adRetryCount = 0 // Reset retry count on success
+                                // Stop shimmer and show banner ad
+                                binding.shimmerViewContainer.stopShimmer()
+                                binding.shimmerViewContainer.visibility = View.GONE
+                                binding.bannerAdContainer.visibility = View.VISIBLE
+                                if (continuation.isActive) continuation.resume(Unit) {}
+                            }
+                        }
+                    }
+                }
+            } catch (e: TimeoutCancellationException) {
+                Log.e(TAG, "Banner ad load timed out")
+                hideAdContainers()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in ad loading coroutine: ${e.message}")
+                hideAdContainers()
+            }
+        }
+    }
+
+    private fun hideAdContainers() {
+        binding.shimmerViewContainer.stopShimmer()
+        binding.shimmerViewContainer.visibility = View.GONE
+        binding.bannerAdContainer.visibility = View.GONE
+    }
+
     private fun loadBannerAd() {
         try {
-            // Start shimmer effect
-            binding.shimmerViewContainer.startShimmer()
-            binding.shimmerViewContainer.visibility = View.VISIBLE
-            binding.bannerAdContainer.visibility = View.GONE
-            
             val adView = AdView(this)
             adView.adUnitId = getString(R.string.admob_banner_id)
             adView.setAdSize(getAdSize())
@@ -80,34 +151,14 @@ class MainActivity : AppCompatActivity() {
             adView.loadAd(adRequest)
 
             bannerAd = adView
-
-            adView.adListener = object : AdListener() {
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    Log.e(TAG, "Banner ad failed to load: ${error.message}")
-                    // Stop shimmer and hide ad container
-                    binding.shimmerViewContainer.stopShimmer()
-                    binding.shimmerViewContainer.visibility = View.GONE
-                    binding.bannerAdContainer.visibility = View.GONE
-                }
-                
-                override fun onAdLoaded() {
-                    Log.d(TAG, "Banner ad loaded successfully")
-                    // Stop shimmer and show banner ad
-                    binding.shimmerViewContainer.stopShimmer()
-                    binding.shimmerViewContainer.visibility = View.GONE
-                    binding.bannerAdContainer.visibility = View.VISIBLE
-                }
-            }
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading banner ad: ${e.message}")
-            // Stop shimmer and hide containers
-            binding.shimmerViewContainer.stopShimmer()
-            binding.shimmerViewContainer.visibility = View.GONE
-            binding.bannerAdContainer.visibility = View.GONE
+            Log.e(TAG, "Error creating banner ad: ${e.message}")
+            hideAdContainers()
         }
     }
 
     private fun getAdSize(): AdSize {
+        // Determine the screen width to use for the ad width.
         val display = windowManager.defaultDisplay
         val outMetrics = DisplayMetrics()
         display.getMetrics(outMetrics)
@@ -115,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         val density = outMetrics.density
         var adWidthPixels = binding.bannerAdContainer.width.toFloat()
 
+        // If the ad container width isn't available, default to the full screen width
         if (adWidthPixels == 0f) {
             adWidthPixels = outMetrics.widthPixels.toFloat()
         }
@@ -242,6 +294,12 @@ class MainActivity : AppCompatActivity() {
         if (::adHelper.isInitialized && !adHelper.isAnyAdReady()) {
             adHelper.preloadAds()
         }
+        
+        // Check if banner ad needs to be reloaded
+        if (bannerAd == null || binding.bannerAdContainer.visibility != View.VISIBLE) {
+            adRetryCount = 0 // Reset retry count
+            loadBannerAdWithTimeout()
+        }
     }
 
     override fun onPause() {
@@ -255,6 +313,10 @@ class MainActivity : AppCompatActivity() {
         if (::adHelper.isInitialized) {
             adHelper.destroy()
         }
+        
+        // Cancel all coroutines
+        adLoadJob?.cancel()
+        adScope.cancel()
     }
 
     companion object {
