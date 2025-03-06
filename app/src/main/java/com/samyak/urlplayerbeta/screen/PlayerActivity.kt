@@ -65,6 +65,7 @@ import android.widget.FrameLayout
 import com.google.android.exoplayer2.ui.CaptionStyleCompat
 import com.google.android.gms.cast.CastStatusCodes
 import com.samyak.urlplayerbeta.AdManage.Helper
+import android.util.Log
 
 class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -264,10 +265,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        url = intent.getStringExtra("URL")
-        userAgent = intent.getStringExtra("USER_AGENT")
+        // Handle different intent types
+        handleIntent(intent)
 
         if (url == null) {
+            Toast.makeText(this, "No valid URL provided", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -298,6 +300,44 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         }
     }
 
+    private fun handleIntent(intent: Intent) {
+        // First check for explicit URL extra (from our own app or other apps)
+        url = intent.getStringExtra("URL")
+        userAgent = intent.getStringExtra("USER_AGENT")
+        
+        // If URL is null, try to get it from the data URI (VIEW intents)
+        if (url == null && intent.action == Intent.ACTION_VIEW) {
+            val uri = intent.data
+            if (uri != null) {
+                url = uri.toString()
+                
+                // Try to extract title from URI path if no channel name provided
+                if (intent.getStringExtra("CHANNEL_NAME") == null) {
+                    val path = uri.path
+                    if (path != null) {
+                        val fileName = path.substringAfterLast('/')
+                            .substringBeforeLast('.')
+                            .replace("_", " ")
+                            .replace("-", " ")
+                            .capitalize(Locale.getDefault())
+                        
+                        intent.putExtra("CHANNEL_NAME", fileName)
+                    }
+                }
+            }
+        }
+        
+        // Set default user agent if not provided
+        if (userAgent == null) {
+            userAgent = Util.getUserAgent(this, "URLPlayerBeta")
+        }
+        
+        // Log the received intent data for debugging
+        Log.d("PlayerActivity", "Received URL: $url")
+        Log.d("PlayerActivity", "Channel Name: ${intent.getStringExtra("CHANNEL_NAME")}")
+        Log.d("PlayerActivity", "User Agent: $userAgent")
+    }
+
     private fun initializeViews() {
         // Initialize main views from binding
         playerView = binding.playerView
@@ -326,8 +366,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             nextButton = playerView.findViewById(R.id.nextBtn)
             fullScreenButton = playerView.findViewById(R.id.fullScreenBtn)
 
-            // Set initial title
-            val channelName = intent.getStringExtra("CHANNEL_NAME") ?: getString(R.string.video_name)
+            // Set initial title from intent
+            val channelName = intent.getStringExtra("CHANNEL_NAME") 
+                ?: url?.substringAfterLast('/')?.substringBeforeLast('.')
+                ?: getString(R.string.video_name)
+                
             videoTitle.text = channelName
             videoTitle.isSelected = true
 
@@ -1457,7 +1500,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             val streamType = when {
                 // HLS streams
                 url?.contains(".m3u8", ignoreCase = true) == true || 
-                mimeType == "application/vnd.apple.mpegurl" -> 
+                url?.contains("playlist", ignoreCase = true) == true -> 
                     MediaInfo.STREAM_TYPE_LIVE
                 
                 // DASH streams
