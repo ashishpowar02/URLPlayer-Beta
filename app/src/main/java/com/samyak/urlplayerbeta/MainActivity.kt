@@ -33,7 +33,6 @@ class MainActivity : AppCompatActivity() {
     private var adLoadJob: Job? = null
     private val adScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var adRetryCount = 0
-    private val maxRetries = 3
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,16 +96,23 @@ class MainActivity : AppCompatActivity() {
                                 Log.e(TAG, "Banner ad failed to load: ${error.message}")
                                 if (continuation.isActive) continuation.resume(Unit) {}
                                 
-                                // Retry logic
-                                if (adRetryCount < maxRetries) {
+                                // Check if the error is due to network connectivity
+                                // Network error code is 2, as per AdMob documentation
+                                if (error.code == 2) {
+                                    Log.d(TAG, "Network error detected, will retry when network is available")
+                                    // Hide shimmer temporarily but will retry when network is back
+                                    binding.shimmerViewContainer.stopShimmer()
+                                    binding.shimmerViewContainer.visibility = View.GONE
+                                } else {
+                                    // Retry with exponential backoff for other errors
                                     adRetryCount++
                                     Log.d(TAG, "Retrying banner ad load (attempt $adRetryCount)")
                                     adScope.launch {
-                                        delay(1000) // Wait 1 second before retry
+                                        // Exponential backoff for retries
+                                        val delayTime = minOf(1000L * (1 shl minOf(adRetryCount, 6)), 30000L)
+                                        delay(delayTime) // Wait with increasing delay, max 30 seconds
                                         loadBannerAdWithTimeout()
                                     }
-                                } else {
-                                    hideAdContainers()
                                 }
                             }
                             
@@ -119,15 +125,39 @@ class MainActivity : AppCompatActivity() {
                                 binding.bannerAdContainer.visibility = View.VISIBLE
                                 if (continuation.isActive) continuation.resume(Unit) {}
                             }
+                            
+                            override fun onAdImpression() {
+                                // Log impression for analytics
+                                Log.d(TAG, "Banner ad impression recorded")
+                            }
+                            
+                            override fun onAdClicked() {
+                                // Log click for analytics
+                                Log.d(TAG, "Banner ad was clicked")
+                            }
                         }
                     }
                 }
             } catch (e: TimeoutCancellationException) {
                 Log.e(TAG, "Banner ad load timed out")
-                hideAdContainers()
+                // Even on timeout, retry loading the ad
+                adRetryCount++
+                Log.d(TAG, "Retrying banner ad load after timeout (attempt $adRetryCount)")
+                adScope.launch {
+                    val delayTime = minOf(1000L * (1 shl minOf(adRetryCount, 6)), 30000L)
+                    delay(delayTime)
+                    loadBannerAdWithTimeout()
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in ad loading coroutine: ${e.message}")
-                hideAdContainers()
+                // Retry on other exceptions too
+                adRetryCount++
+                Log.d(TAG, "Retrying banner ad load after error (attempt $adRetryCount)")
+                adScope.launch {
+                    val delayTime = minOf(1000L * (1 shl minOf(adRetryCount, 6)), 30000L)
+                    delay(delayTime)
+                    loadBannerAdWithTimeout()
+                }
             }
         }
     }
@@ -142,14 +172,22 @@ class MainActivity : AppCompatActivity() {
         try {
             val adView = AdView(this)
             adView.adUnitId = getString(R.string.admob_banner_id)
-            adView.setAdSize(getAdSize())
+            
+            // Get the optimal ad size based on screen dimensions
+            val adSize = getAdSize()
+            adView.setAdSize(adSize)
+            
+            Log.d(TAG, "Loading banner ad with size: ${adSize.width}x${adSize.height}")
             
             binding.bannerAdContainer.removeAllViews()
             binding.bannerAdContainer.addView(adView)
 
-            val adRequest = AdRequest.Builder().build()
+            // Build ad request with smart targeting options
+            val adRequest = AdRequest.Builder()
+                .setHttpTimeoutMillis(15000) // Increase timeout for slow networks
+                .build()
+                
             adView.loadAd(adRequest)
-
             bannerAd = adView
         } catch (e: Exception) {
             Log.e(TAG, "Error creating banner ad: ${e.message}")
@@ -299,6 +337,15 @@ class MainActivity : AppCompatActivity() {
         if (bannerAd == null || binding.bannerAdContainer.visibility != View.VISIBLE) {
             adRetryCount = 0 // Reset retry count
             loadBannerAdWithTimeout()
+        } else {
+            // Check if the ad has been showing for a long time and might need refreshing
+            adScope.launch {
+                delay(300000) // 5 minutes
+                if (isActive && !isFinishing) {
+                    Log.d(TAG, "Refreshing banner ad after 5 minutes")
+                    loadBannerAdWithTimeout()
+                }
+            }
         }
     }
 
