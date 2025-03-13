@@ -7,6 +7,16 @@
 
 URL Player Beta is an Android application that allows users to play online videos from various streaming sources. The app supports multiple video formats and streaming protocols.
 
+## Enjoying WhatsApp Cleaner? Consider Supporting!
+Consider donating to support the development! It requires a lot of time and effort to develop the
+copylefted libre software app, gratis 
+
+<p align="center">
+  <a href="https://buymeacoffee.com/mr_samyakkamble">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="60px">
+  </a>
+</p>
+
 ## Features
 
 - Play various video formats (HLS, MP4, AVI, MKV, etc.)
