@@ -7,7 +7,7 @@
 
 URL Player Beta is an Android application that allows users to play online videos from various streaming sources. The app supports multiple video formats and streaming protocols.
 
-## Enjoying WhatsApp Cleaner? Consider Supporting!
+## Enjoying URLPlayer Beta? Consider Supporting!
 Consider donating to support the development! It requires a lot of time and effort to develop the
 copylefted libre software app, gratis 
 
