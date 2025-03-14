@@ -28,7 +28,8 @@ class URLActivity : AppCompatActivity() {
             ".m3u",   // Playlist format
             ".ts",    // Transport streams
             ".mov",   // QuickTime videos
-            ".webm"   // WebM videos
+            ".webm",  // WebM videos
+            ".mpd"    // DASH streams
         )
 
         private val SUPPORTED_PROTOCOLS = listOf(
@@ -156,6 +157,7 @@ class URLActivity : AppCompatActivity() {
             lowercaseUrl.endsWith(".avi") -> "AVI"
             lowercaseUrl.endsWith(".mkv") -> "MKV"
             lowercaseUrl.endsWith(".m3u") -> "M3U"
+            lowercaseUrl.endsWith(".mpd") -> "DASH"
             lowercaseUrl.endsWith(".ts") -> "TS"
             lowercaseUrl.endsWith(".mov") -> "MOV"
             lowercaseUrl.endsWith(".webm") -> "WEBM"

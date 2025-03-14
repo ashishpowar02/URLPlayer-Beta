@@ -66,6 +66,7 @@ import com.google.android.exoplayer2.ui.CaptionStyleCompat
 import com.google.android.gms.cast.CastStatusCodes
 import com.samyak.urlplayerbeta.AdManage.Helper
 import android.util.Log
+import com.google.android.exoplayer2.source.dash.DashMediaSource
 
 class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -157,7 +158,10 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         // Playlist formats
         "pls" to "audio/x-scpls",
         "asx" to "video/x-ms-asf",
-        "xspf" to "application/xspf+xml"
+        "xspf" to "application/xspf+xml",
+        
+        // Add DASH format
+        "mpd" to "application/dash+xml",
     )
 
     private var isPlaying = false
@@ -982,6 +986,13 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                         .createMediaSource(mediaItem)
                 }
                 
+                // DASH streams
+                url?.endsWith(".mpd", ignoreCase = true) == true ||
+                url?.contains("dash", ignoreCase = true) == true -> {
+                    DashMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(mediaItem)
+                }
+                
                 // Progressive streams
                 else -> {
                     val extension = url?.substringAfterLast('.', "")?.lowercase() ?: ""
@@ -1588,21 +1599,27 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         if (url == null) return "video/mp4"
         
         return try {
-            // First check for HLS streams
-            if (url.contains(".m3u8", ignoreCase = true) || 
-                url.contains("playlist", ignoreCase = true)) {
-                return "application/vnd.apple.mpegurl"
-            }
-            
-            // Then check file extension
-            val extension = url.substringAfterLast('.', "").lowercase()
-            supportedFormats[extension] ?: when {
-                // Fallback checks for streaming URLs
-                url.contains("dash", ignoreCase = true) -> "application/dash+xml"
-                url.contains("hls", ignoreCase = true) -> "application/vnd.apple.mpegurl"
-                url.contains("smooth", ignoreCase = true) -> "application/vnd.ms-sstr+xml"
-                // Default to MP4 for unknown types
-                else -> "video/mp4"
+            // First check for streaming formats
+            val lowercaseUrl = url.lowercase()
+            when {
+                // HLS streams
+                lowercaseUrl.endsWith(".m3u8") || 
+                lowercaseUrl.endsWith(".m3u") -> "application/vnd.apple.mpegurl"
+                
+                // DASH streams
+                lowercaseUrl.endsWith(".mpd") -> "application/dash+xml"
+                
+                // Then check file extension
+                else -> {
+                    val extension = url.substringAfterLast('.', "").lowercase()
+                    supportedFormats[extension] ?: when {
+                        url.contains("dash", ignoreCase = true) -> "application/dash+xml"
+                        url.contains("hls", ignoreCase = true) -> "application/vnd.apple.mpegurl"
+                        url.contains("smooth", ignoreCase = true) -> "application/vnd.ms-sstr+xml"
+                        // Default to MP4 for unknown types
+                        else -> "video/mp4"
+                    }
+                }
             }
         } catch (e: Exception) {
             "video/mp4"  // Default fallback
