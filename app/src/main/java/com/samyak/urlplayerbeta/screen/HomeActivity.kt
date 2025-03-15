@@ -260,6 +260,8 @@ class HomeActivity : AppCompatActivity() {
                     is Helper.AdResult.Error -> {
                         // Ad failed to show, proceed directly
                         startPlayerActivity(video)
+                        // Log the error
+                        Log.e(TAG, "Failed to show interstitial ad: ${result.message}")
                     }
                 }
             }
