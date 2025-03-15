@@ -3,6 +3,8 @@
 <div align="center">  
   <img src="https://github.com/samyak2403/URLPlayer-Beta/blob/master/image/URLPlayer-Beta.png" alt="Sportsmine Logo" width="120"/>  
   <h3>Your Ultimate URL Player Beta</h3>  
+  
+  ![pv](https://pageview.vercel.app/?github_user=URLPlayer-Beta)
 </div>  
 
 URL Player Beta is an Android application that allows users to play online videos from various streaming sources. The app supports multiple video formats and streaming protocols.
@@ -94,9 +96,9 @@ copylefted libre software app, gratis
   <video width="100%" autoplay loop muted src="https://github.com/user-attachments/assets/1b9fde47-9fb8-41ce-a3d9-b2b058b20417"   
   </tr>
 </table>
-
-
-
+    
+# URL Player Beta - Publishing On Play Store Guide -> 
+<p align=""><a href="https://github.com/samyak2403/URLPlayer-Beta/blob/master/PublishingGuide.md"><img src="image/playstore.png" alt="playstore" height="60px"></a></p>
 
 
 ## Installation
