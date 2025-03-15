@@ -96,8 +96,8 @@ copylefted libre software app, gratis
   <video width="100%" autoplay loop muted src="https://github.com/user-attachments/assets/1b9fde47-9fb8-41ce-a3d9-b2b058b20417"   
   </tr>
 </table>
-
-# URL Player Beta - Publishing On Play Store Guide
+    
+# URL Player Beta - Publishing On Play Store Guide ->
 <p align="center">
   <a href="https://github.com/samyak2403/URLPlayer-Beta/blob/master/PublishingGuide.md">
     <img src="image/playstore.png" alt="playstore" height="60px">
