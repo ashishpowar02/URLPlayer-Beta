@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
@@ -24,6 +25,9 @@ import com.samyak.urlplayerbeta.screen.HomeActivity
 import com.samyak.urlplayerbeta.AdManage.Helper
 import com.facebook.shimmer.ShimmerFrameLayout
 import com.samyak.urlplayerbeta.screen.AboutActivity
+import com.samyak.urlplayerbeta.AppUpdate.InAppUpdateManager
+import com.google.android.play.core.install.InstallStateUpdatedListener
+import com.google.android.play.core.install.model.InstallStatus
 import kotlinx.coroutines.*
 
 class MainActivity : AppCompatActivity() {
@@ -34,10 +38,35 @@ class MainActivity : AppCompatActivity() {
     private val adScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var adRetryCount = 0
     
+    // Add install state listener for app updates
+    private val installStateUpdatedListener = InstallStateUpdatedListener { state ->
+        if (state.installStatus() == InstallStatus.DOWNLOADED) {
+            // Show a snackbar or notification that the update has been downloaded
+            Toast.makeText(
+                this,
+                "Update downloaded. Restart to install.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+    
+    // Register the launcher for app updates
+    private val updateResultLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) {
+            Log.d(TAG, "Update flow failed! Result code: ${result.resultCode}")
+        }
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Initialize In-App Update Manager
+        InAppUpdateManager.init(this, updateResultLauncher)
+        InAppUpdateManager.registerListener(installStateUpdatedListener)
 
         // Initialize Mobile Ads SDK with enhanced error handling
         MobileAds.initialize(this) { initializationStatus ->
@@ -360,6 +389,9 @@ class MainActivity : AppCompatActivity() {
         if (::adHelper.isInitialized) {
             adHelper.destroy()
         }
+        
+        // Unregister the update listener
+        InAppUpdateManager.unregisterListener(installStateUpdatedListener)
         
         // Cancel all coroutines
         adLoadJob?.cancel()

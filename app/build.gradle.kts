@@ -56,6 +56,7 @@ dependencies {
     implementation(libs.exoplayerDash)
 
     implementation(libs.androidx.constraintlayout)
+    implementation(libs.app.update.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

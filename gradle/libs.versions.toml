@@ -15,6 +15,7 @@ exoplayerCoreVer = "2.16.1"
 exoplayerUiVer = "2.16.1"
 exoplayerDashVer = "2.16.1"
 constraintlayout = "2.2.0"
+appUpdateKtx = "2.1.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -32,6 +33,7 @@ androidx-constraintlayout = { group = "androidx.constraintlayout", name = "const
 exoplayerCore = {group = "com.google.android.exoplayer", name = "exoplayer", version.ref = "exoplayerCoreVer"}
 exoplayerUi = {group = "com.google.android.exoplayer", name = "exoplayer-ui", version.ref = "exoplayerUiVer"}
 exoplayerDash = {group = "com.google.android.exoplayer", name = "exoplayer-dash", version.ref = "exoplayerDashVer"}
+app-update-ktx = { group = "com.google.android.play", name = "app-update-ktx", version.ref = "appUpdateKtx" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
