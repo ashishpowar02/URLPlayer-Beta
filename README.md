@@ -98,7 +98,7 @@ copylefted libre software app, gratis
 </table>
     
 # URL Player Beta - Publishing On Play Store Guide -> 
-<p align="center"><a href="https://github.com/samyak2403/URLPlayer-Beta/blob/master/PublishingGuide.md"><img src="image/playstore.png" alt="playstore" height="60px"></a></p>
+<p align=""><a href="https://github.com/samyak2403/URLPlayer-Beta/blob/master/PublishingGuide.md"><img src="image/playstore.png" alt="playstore" height="60px"></a></p>
 
 
 ## Installation
