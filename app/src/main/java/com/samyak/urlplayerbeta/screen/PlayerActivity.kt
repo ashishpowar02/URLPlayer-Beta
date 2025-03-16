@@ -307,40 +307,51 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         url = intent.getStringExtra("URL")
         userAgent = intent.getStringExtra("USER_AGENT")
 
-        showInterstitialAd {
+        // Check if we should show an ad based on some condition
+        val shouldShowAd = url?.contains("premium") != true // Don't show ads for premium content
+        
+        if (shouldShowAd) {
+            showInterstitialAd {
+                processUrlAndContinue(intent)
+            }
+        } else {
+            // Skip ad and continue directly
+            processUrlAndContinue(intent)
+        }
+    }
 
-            // If URL is null, try to get it from the data URI (VIEW intents)
-            if (url == null && intent.action == Intent.ACTION_VIEW) {
-                val uri = intent.data
-                if (uri != null) {
-                    url = uri.toString()
-                    
-                    // Try to extract title from URI path if no channel name provided
-                    if (intent.getStringExtra("CHANNEL_NAME") == null) {
-                        val path = uri.path
-                        if (path != null) {
-                            val fileName = path.substringAfterLast('/')
-                                .substringBeforeLast('.')
-                                .replace("_", " ")
-                                .replace("-", " ")
-                                .capitalize(Locale.getDefault())
-                            
-                            intent.putExtra("CHANNEL_NAME", fileName)
-                        }
+    private fun processUrlAndContinue(intent: Intent) {
+        // If URL is null, try to get it from the data URI (VIEW intents)
+        if (url == null && intent.action == Intent.ACTION_VIEW) {
+            val uri = intent.data
+            if (uri != null) {
+                url = uri.toString()
+                
+                // Try to extract title from URI path if no channel name provided
+                if (intent.getStringExtra("CHANNEL_NAME") == null) {
+                    val path = uri.path
+                    if (path != null) {
+                        val fileName = path.substringAfterLast('/')
+                            .substringBeforeLast('.')
+                            .replace("_", " ")
+                            .replace("-", " ")
+                            .capitalize(Locale.getDefault())
+                        
+                        intent.putExtra("CHANNEL_NAME", fileName)
                     }
                 }
             }
-            
-            // Set default user agent if not provided
-            if (userAgent == null) {
-                userAgent = Util.getUserAgent(this, "URLPlayerBeta")
-            }
-            
-            // Log the received intent data for debugging
-            Log.d("PlayerActivity", "Received URL: $url")
-            Log.d("PlayerActivity", "Channel Name: ${intent.getStringExtra("CHANNEL_NAME")}")
-            Log.d("PlayerActivity", "User Agent: $userAgent")
         }
+        
+        // Set default user agent if not provided
+        if (userAgent == null) {
+            userAgent = Util.getUserAgent(this, "URLPlayerBeta")
+        }
+        
+        // Log the received intent data for debugging
+        Log.d("PlayerActivity", "Received URL: $url")
+        Log.d("PlayerActivity", "Channel Name: ${intent.getStringExtra("CHANNEL_NAME")}")
+        Log.d("PlayerActivity", "User Agent: $userAgent")
     }
 
     private fun initializeViews() {

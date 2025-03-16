@@ -18,6 +18,7 @@ import com.samyak.urlplayerbeta.AppUpdate.InAppUpdateManager
 import com.google.android.play.core.install.InstallStateUpdatedListener
 import com.google.android.play.core.install.model.InstallStatus
 import com.samyak.urlplayerbeta.AdManage.loadBannerAd
+import com.samyak.urlplayerbeta.utils.AppConstants
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -106,10 +107,10 @@ class MainActivity : AppCompatActivity() {
     private fun rateApp() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW,
-                Uri.parse("market://details?id=$packageName")))
+                Uri.parse("${AppConstants.MARKET_BASE_URL}$packageName")))
         } catch (e: ActivityNotFoundException) {
             startActivity(Intent(Intent.ACTION_VIEW,
-                Uri.parse("http://play.google.com/store/apps/details?id=$packageName")))
+                Uri.parse("${AppConstants.PLAY_STORE_BASE_URL}$packageName")))
         }
     }
 
@@ -119,15 +120,14 @@ class MainActivity : AppCompatActivity() {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT,
                 "Watch your favorite videos with ${getString(R.string.app_name)}!\n" +
-                        "Download now: http://play.google.com/store/apps/details?id=$packageName")
+                        "Download now: ${AppConstants.PLAY_STORE_BASE_URL}$packageName")
         }
         startActivity(Intent.createChooser(shareIntent, getString(R.string.share_message)))
     }
 
     private fun openPrivacyPolicy() {
-        val privacyUrl = "https://your-privacy-policy-url.com"
         try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(privacyUrl)))
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(AppConstants.PRIVACY_POLICY_URL)))
         } catch (e: Exception) {
             Toast.makeText(this, getString(R.string.error_privacy_policy), Toast.LENGTH_SHORT).show()
         }
@@ -135,7 +135,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun contactUs() {
         val intent = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("mailto:arrowwouldpro@gmail.com")
+            data = Uri.parse("mailto:${AppConstants.CONTACT_EMAIL}")
             putExtra(Intent.EXTRA_SUBJECT, getString(R.string.email_subject))
         }
         try {
