@@ -5,34 +5,24 @@ import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.samyak.urlplayerbeta.AdManage.Helper
+import com.samyak.urlplayerbeta.AdManage.loadBannerAd
 import com.samyak.urlplayerbeta.R
 import com.samyak.urlplayerbeta.databinding.ActivityAboutBinding
 
 class AboutActivity : AppCompatActivity() {
     
     private lateinit var binding: ActivityAboutBinding
-    private lateinit var adHelper: Helper
     
     companion object {
         private const val TAG = "AboutActivity"
-        private const val CLICK_THRESHOLD = 2
-        private const val MAX_AD_ATTEMPTS = 5
-        private const val RETRY_DELAY = 5000L
-        private const val CLICK_COOLDOWN = 1000L
     }
-
-    private var adLoadAttempts = 0
-    private var isAdLoading = false
-    private var lastClickTime = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityAboutBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
+        binding.bannerContainer.loadBannerAd()
         initializeUI()
-        initializeAds()
         setupClickListeners()
     }
 
@@ -41,87 +31,15 @@ class AboutActivity : AppCompatActivity() {
         setupVersionInfo()
     }
 
-    private fun initializeAds() {
-        if (!::adHelper.isInitialized) {
-            adHelper = Helper(this, binding)
-            loadBannerAd()
-            preloadInterstitialAd()
-        }
-    }
-
-    private fun loadBannerAd() {
-        if (!isAdLoading && adLoadAttempts < MAX_AD_ATTEMPTS) {
-            isAdLoading = true
-            adLoadAttempts++
-            
-            adHelper.loadBannerAd(R.id.banner_container) { result ->
-                isAdLoading = false
-                when (result) {
-                    is Helper.AdResult.Success -> {
-                        Log.d(TAG, "Banner ad loaded successfully")
-                        adLoadAttempts = 0 // Reset attempts on success
-                    }
-                    is Helper.AdResult.Error -> {
-                        Log.e(TAG, "Banner ad failed to load: ${result.message}")
-                        retryLoadingBannerAd()
-                    }
-                }
-            }
-        }
-    }
-
-    private fun retryLoadingBannerAd() {
-        if (adLoadAttempts < MAX_AD_ATTEMPTS) {
-            binding.root.postDelayed({
-                loadBannerAd()
-            }, RETRY_DELAY)
-        }
-    }
-
-    private fun preloadInterstitialAd() {
-        if (!isAdLoading) {
-            adHelper.preloadAds()
-        }
-    }
-
     private fun setupClickListeners() {
+        // Simple click listeners without ad logic
         binding.developerInfo.setOnClickListener {
-            handleAdClick { showInterstitialAd() }
+            // No action needed
         }
 
         binding.appDescription.setOnClickListener {
-            handleAdClick { showInterstitialAd() }
+            // No action needed
         }
-    }
-
-    private fun handleAdClick(showAd: () -> Unit) {
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastClickTime >= CLICK_COOLDOWN) {
-            lastClickTime = currentTime
-            showAd()
-        }
-    }
-
-    private fun showInterstitialAd() {
-        if (!adHelper.isAnyAdReady()) {
-            preloadInterstitialAd()
-            return
-        }
-
-        adHelper.showCounterInterstitialAd(
-            threshold = CLICK_THRESHOLD,
-            onAdShown = {
-                Log.d(TAG, "Interstitial ad shown successfully")
-                // Preload next ad
-                preloadInterstitialAd()
-            },
-            onAdNotShown = { message ->
-                Log.d(TAG, "Interstitial ad not shown: $message")
-                if (message.contains("not loaded")) {
-                    preloadInterstitialAd()
-                }
-            }
-        )
     }
 
     private fun setupVersionInfo() {
@@ -150,29 +68,8 @@ class AboutActivity : AppCompatActivity() {
         )
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (!adHelper.isAnyAdReady() && !isAdLoading) {
-            adLoadAttempts = 0 // Reset attempts on resume
-            loadBannerAd()
-            preloadInterstitialAd()
-        }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        isAdLoading = false // Reset loading state
-    }
-
     override fun onSupportNavigateUp(): Boolean {
         onBackPressed()
         return true
-    }
-
-    override fun onDestroy() {
-        if (::adHelper.isInitialized) {
-            adHelper.destroy()
-        }
-        super.onDestroy()
     }
 } 

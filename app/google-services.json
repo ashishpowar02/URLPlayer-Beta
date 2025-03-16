@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "498691934855",
+    "firebase_url": "https://wallpaers-pro-default-rtdb.firebaseio.com",
+    "project_id": "wallpaers-pro",
+    "storage_bucket": "wallpaers-pro.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:498691934855:android:35cc8c7cf976e5529f8622",
+        "android_client_info": {
+          "package_name": "com.samyak.awallpaper"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4po2l3KDzYFmBtCaJr7H9M6Q2HAsHwZ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:498691934855:android:4ddbf3bd0dbf8e829f8622",
+        "android_client_info": {
+          "package_name": "com.samyak.urlplayerbeta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4po2l3KDzYFmBtCaJr7H9M6Q2HAsHwZ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     id("kotlin-parcelize")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -29,11 +30,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "17"
     }
 
     buildFeatures {
@@ -57,6 +58,7 @@ dependencies {
 
     implementation(libs.androidx.constraintlayout)
     implementation(libs.app.update.ktx)
+//    implementation(libs.firebase.database.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -65,7 +67,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.11.0")
 
     implementation("com.airbnb.android:lottie:4.2.2")
-
 
 
     //for vertical progress bar
@@ -77,6 +78,9 @@ dependencies {
     //custom chrome tabs for integrating youtube
     implementation(libs.androidx.browser)
 
+    implementation(platform("com.google.firebase:firebase-bom:33.10.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation(libs.firebase.database.ktx)
 
 
     // Gauge Library
@@ -87,7 +91,7 @@ dependencies {
 
     implementation("com.google.android.gms:play-services-ads:23.6.0")
 
-    implementation ("com.facebook.shimmer:shimmer:0.5.0")
+    implementation("com.facebook.shimmer:shimmer:0.5.0")
 
     implementation("de.hdodenhof:circleimageview:3.1.0")
 

@@ -64,9 +64,9 @@ import android.util.TypedValue
 import android.widget.FrameLayout
 import com.google.android.exoplayer2.ui.CaptionStyleCompat
 import com.google.android.gms.cast.CastStatusCodes
-import com.samyak.urlplayerbeta.AdManage.Helper
 import android.util.Log
 import com.google.android.exoplayer2.source.dash.DashMediaSource
+import com.samyak.urlplayerbeta.AdManage.showInterstitialAd
 
 class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -188,7 +188,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private var screenWidth: Int = 0
 
     // Add at the top with other properties
-    private lateinit var adHelper: Helper
 
     private val castSessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {}
@@ -253,9 +252,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Initialize AdHelper
-        adHelper = Helper(this, binding)
-
         // Force landscape orientation
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
@@ -286,6 +282,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         volume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
 
+
         setupPlayer()
         setupGestureControls()
 
@@ -306,40 +303,43 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private fun handleIntent(intent: Intent) {
         // First check for explicit URL extra (from our own app or other apps)
-        url = intent.getStringExtra("URL")
-        userAgent = intent.getStringExtra("USER_AGENT")
-        
-        // If URL is null, try to get it from the data URI (VIEW intents)
-        if (url == null && intent.action == Intent.ACTION_VIEW) {
-            val uri = intent.data
-            if (uri != null) {
-                url = uri.toString()
-                
-                // Try to extract title from URI path if no channel name provided
-                if (intent.getStringExtra("CHANNEL_NAME") == null) {
-                    val path = uri.path
-                    if (path != null) {
-                        val fileName = path.substringAfterLast('/')
-                            .substringBeforeLast('.')
-                            .replace("_", " ")
-                            .replace("-", " ")
-                            .capitalize(Locale.getDefault())
-                        
-                        intent.putExtra("CHANNEL_NAME", fileName)
+        //Ads Logic
+        showInterstitialAd {
+            url = intent.getStringExtra("URL")
+            userAgent = intent.getStringExtra("USER_AGENT")
+            
+            // If URL is null, try to get it from the data URI (VIEW intents)
+            if (url == null && intent.action == Intent.ACTION_VIEW) {
+                val uri = intent.data
+                if (uri != null) {
+                    url = uri.toString()
+                    
+                    // Try to extract title from URI path if no channel name provided
+                    if (intent.getStringExtra("CHANNEL_NAME") == null) {
+                        val path = uri.path
+                        if (path != null) {
+                            val fileName = path.substringAfterLast('/')
+                                .substringBeforeLast('.')
+                                .replace("_", " ")
+                                .replace("-", " ")
+                                .capitalize(Locale.getDefault())
+                            
+                            intent.putExtra("CHANNEL_NAME", fileName)
+                        }
                     }
                 }
             }
+            
+            // Set default user agent if not provided
+            if (userAgent == null) {
+                userAgent = Util.getUserAgent(this, "URLPlayerBeta")
+            }
+            
+            // Log the received intent data for debugging
+            Log.d("PlayerActivity", "Received URL: $url")
+            Log.d("PlayerActivity", "Channel Name: ${intent.getStringExtra("CHANNEL_NAME")}")
+            Log.d("PlayerActivity", "User Agent: $userAgent")
         }
-        
-        // Set default user agent if not provided
-        if (userAgent == null) {
-            userAgent = Util.getUserAgent(this, "URLPlayerBeta")
-        }
-        
-        // Log the received intent data for debugging
-        Log.d("PlayerActivity", "Received URL: $url")
-        Log.d("PlayerActivity", "Channel Name: ${intent.getStringExtra("CHANNEL_NAME")}")
-        Log.d("PlayerActivity", "User Agent: $userAgent")
     }
 
     private fun initializeViews() {
@@ -609,45 +609,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         try {
             when (playbackState) {
                 PlaybackState.PAUSED, PlaybackState.ENDED -> {
-                    // Show ad only if video was paused for more than 5 seconds
-                    val currentTime = System.currentTimeMillis()
-                    val lastPauseTime = getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
-                        .getLong("last_pause_time", 0)
-                    val lastAdTime = getSharedPreferences("ad_prefs", Context.MODE_PRIVATE)
-                        .getLong("last_ad_time", 0)
-                    
-                    // Show ad if enough time passed since last pause AND last ad
-                    if (currentTime - lastPauseTime > 5000 && currentTime - lastAdTime > 30000) {
-                        adHelper.showCounterInterstitialAd(
-                            threshold = 3,
-                            onAdShown = {
-                                // Save ad time
-                                getSharedPreferences("ad_prefs", Context.MODE_PRIVATE)
-                                    .edit()
-                                    .putLong("last_ad_time", currentTime)
-                                    .apply()
-                                
-                                // Resume playback after ad is shown
-                                player.play()
-                                playbackState = PlaybackState.PLAYING
-                                isPlaying = true
-                                updatePlayPauseButton(true)
-                            },
-                            onAdNotShown = {
-                                // Play immediately if ad isn't shown
-                                player.play()
-                                playbackState = PlaybackState.PLAYING
-                                isPlaying = true
-                                updatePlayPauseButton(true)
-                            }
-                        )
-                    } else {
-                        // Resume immediately if conditions not met
-                        player.play()
-                        playbackState = PlaybackState.PLAYING
-                        isPlaying = true
-                        updatePlayPauseButton(true)
-                    }
+                    // Simply resume playback without ad logic
+                    player.play()
+                    playbackState = PlaybackState.PLAYING
+                    isPlaying = true
+                    updatePlayPauseButton(true)
                 }
                 PlaybackState.BUFFERING -> {
                     wasPlayingBeforePause = true
@@ -667,52 +633,12 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         try {
             when (playbackState) {
                 PlaybackState.PLAYING, PlaybackState.BUFFERING -> {
-                    // Save pause time
-                    val currentTime = System.currentTimeMillis()
-                    getSharedPreferences("player_prefs", Context.MODE_PRIVATE)
-                        .edit()
-                        .putLong("last_pause_time", currentTime)
-                        .apply()
-
-                    // Get last ad time
-                    val lastAdTime = getSharedPreferences("ad_prefs", Context.MODE_PRIVATE)
-                        .getLong("last_ad_time", 0)
-
-                    // Show ad if enough time passed since last ad
-                    if (currentTime - lastAdTime > 30000) { // 30 seconds between ads
-                        adHelper.showCounterInterstitialAd(
-                            threshold = 3,
-                            onAdShown = {
-                                // Save ad time
-                                getSharedPreferences("ad_prefs", Context.MODE_PRIVATE)
-                                    .edit()
-                                    .putLong("last_ad_time", currentTime)
-                                    .apply()
-                                
-                                // Pause after ad
-                                player.pause()
-                                playbackState = PlaybackState.PAUSED
-                                isPlaying = false
-                                updatePlayPauseButton(false)
-                                wasPlayingBeforePause = true
-                            },
-                            onAdNotShown = {
-                                // Just pause if ad not shown
-                                player.pause()
-                                playbackState = PlaybackState.PAUSED
-                                isPlaying = false
-                                updatePlayPauseButton(false)
-                                wasPlayingBeforePause = true
-                            }
-                        )
-                    } else {
-                        // Pause immediately if too soon for another ad
-                        player.pause()
-                        playbackState = PlaybackState.PAUSED
-                        isPlaying = false
-                        updatePlayPauseButton(false)
-                        wasPlayingBeforePause = true
-                    }
+                    // Simply pause without ad logic
+                    player.pause()
+                    playbackState = PlaybackState.PAUSED
+                    isPlaying = false
+                    updatePlayPauseButton(false)
+                    wasPlayingBeforePause = true
                 }
                 else -> {
                     // Do nothing for other states
@@ -955,6 +881,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     }
 
     private fun setupPlayer() {
+
         try {
             if (::player.isInitialized) {
                 player.release()
@@ -985,19 +912,19 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     HlsMediaSource.Factory(dataSourceFactory)
                         .createMediaSource(mediaItem)
                 }
-                
+
                 // DASH streams
                 url?.endsWith(".mpd", ignoreCase = true) == true ||
                 url?.contains("dash", ignoreCase = true) == true -> {
                     DashMediaSource.Factory(dataSourceFactory)
                         .createMediaSource(mediaItem)
                 }
-                
+
                 // Progressive streams
                 else -> {
                     val extension = url?.substringAfterLast('.', "")?.lowercase() ?: ""
                     val mimeType = supportedFormats[extension]
-                    
+
                     val finalMediaItem = if (mimeType != null) {
                         MediaItem.Builder()
                             .setUri(Uri.parse(url))
@@ -1053,7 +980,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     isPlaying = playing
                     if (playing) {
                         playbackState = PlaybackState.PLAYING
-                    } else if (playbackState != PlaybackState.BUFFERING && 
+                    } else if (playbackState != PlaybackState.BUFFERING &&
                                playbackState != PlaybackState.ENDED) {
                         playbackState = PlaybackState.PAUSED
                     }
@@ -1064,7 +991,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     // Show error message
                     errorTextView.visibility = View.VISIBLE
                     errorTextView.text = "Error: ${error.message}"
-                    
+
                     // Log the error
                     error.printStackTrace()
                 }
@@ -1075,7 +1002,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
             // Apply subtitle styling after player is created
             applySubtitleStyle()
-            
+
             // Add configuration change listener for subtitle resizing
             player.addListener(object : Player.Listener {
                 override fun onSurfaceSizeChanged(width: Int, height: Int) {
@@ -1239,10 +1166,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         try {
             if (::loudnessEnhancer.isInitialized) {
                 loudnessEnhancer.release()
-            }
-            // Clean up ads
-            if (::adHelper.isInitialized) {
-                adHelper.destroy()
             }
         } catch (e: Exception) {
             e.printStackTrace()
