@@ -67,6 +67,7 @@ import com.google.android.gms.cast.CastStatusCodes
 import android.util.Log
 import com.google.android.exoplayer2.source.dash.DashMediaSource
 import com.samyak.urlplayerbeta.AdManage.showInterstitialAd
+import android.util.Rational
 
 class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -188,6 +189,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private var screenWidth: Int = 0
 
     // Add at the top with other properties
+    private var isPipRequested = false
 
     private val castSessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {}
@@ -303,19 +305,17 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private fun handleIntent(intent: Intent) {
         // First check for explicit URL extra (from our own app or other apps)
-        //Ads Logic
         url = intent.getStringExtra("URL")
         userAgent = intent.getStringExtra("USER_AGENT")
 
-        // Check if we should show an ad based on some condition
-        val shouldShowAd = url?.contains("premium") != true // Don't show ads for premium content
-        
-        if (shouldShowAd) {
-            showInterstitialAd {
+        // Check if we should show an ad based on PiP status
+        if (shouldShowAd()) {
+            // Show ad when not in PiP mode
+            showInterstitialAd(customCode = {
                 processUrlAndContinue(intent)
-            }
+            })
         } else {
-            // Skip ad and continue directly
+            // Skip ad and continue directly when in PiP mode
             processUrlAndContinue(intent)
         }
     }
@@ -413,6 +413,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 PlaybackState.PAUSED, PlaybackState.ENDED -> playVideo()
                 PlaybackState.BUFFERING -> {
                     wasPlayingBeforePause = !wasPlayingBeforePause
+                    player.playWhenReady = wasPlayingBeforePause
                     updatePlayPauseButton(wasPlayingBeforePause)
                 }
                 else -> {
@@ -621,7 +622,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         try {
             when (playbackState) {
                 PlaybackState.PAUSED, PlaybackState.ENDED -> {
-                    // Simply resume playback without ad logic
                     player.play()
                     playbackState = PlaybackState.PLAYING
                     isPlaying = true
@@ -629,6 +629,14 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 }
                 PlaybackState.BUFFERING -> {
                     wasPlayingBeforePause = true
+                    player.playWhenReady = true
+                    updatePlayPauseButton(true)
+                }
+                PlaybackState.IDLE -> {
+                    // Try to restart playback if in IDLE state
+                    player.prepare()
+                    player.play()
+                    updatePlayPauseButton(true)
                 }
                 else -> {
                     // Do nothing for other states
@@ -645,12 +653,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         try {
             when (playbackState) {
                 PlaybackState.PLAYING, PlaybackState.BUFFERING -> {
-                    // Simply pause without ad logic
                     player.pause()
                     playbackState = PlaybackState.PAUSED
                     isPlaying = false
                     updatePlayPauseButton(false)
-                    wasPlayingBeforePause = true
+                    wasPlayingBeforePause = false
                 }
                 else -> {
                     // Do nothing for other states
@@ -963,7 +970,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                         Player.STATE_BUFFERING -> {
                             playbackState = PlaybackState.BUFFERING
                             progressBar.visibility = View.VISIBLE
-                            updatePlayPauseButton(wasPlayingBeforePause)
+                            // Don't change play/pause button during buffering
                         }
                         Player.STATE_READY -> {
                             progressBar.visibility = View.GONE
@@ -1191,35 +1198,73 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         finish()
     }
 
-    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode)
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         
-        if (pipStatus != 0) {
-            finish()
-            val intent = Intent(this, PlayerActivity::class.java)
-            when (pipStatus) {
-                1 -> intent.putExtra("class", "FolderActivity")
-                2 -> intent.putExtra("class", "SearchedVideos")
-                3 -> intent.putExtra("class", "AllVideos")
+        if (isInPictureInPictureMode) {
+            // Hide all UI controls when in PiP mode
+            binding.playerView.hideController()
+            binding.lockButton.visibility = View.GONE
+            binding.brightnessIcon.visibility = View.GONE
+            binding.volumeIcon.visibility = View.GONE
+            
+            // Ensure video is playing when entering PiP
+            if (isPlayerReady && !isPlaying) {
+                playVideo()
             }
-            startActivity(intent)
-        }
-        
-        if (!isInPictureInPictureMode) {
-            pauseVideo() // Pause video when exiting PiP mode
+        } else {
+            // Reset PiP flag when exiting PiP mode
+            isPipRequested = false
+            
+            // Show controls when exiting PiP mode
+            binding.lockButton.visibility = View.VISIBLE
+            
+            // Handle navigation based on pipStatus
+            if (pipStatus != 0) {
+                finish()
+                val intent = Intent(this, PlayerActivity::class.java)
+                when (pipStatus) {
+                    1 -> intent.putExtra("class", "FolderActivity")
+                    2 -> intent.putExtra("class", "SearchedVideos")
+                    3 -> intent.putExtra("class", "AllVideos")
+                }
+                startActivity(intent)
+            }
         }
     }
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!isInPictureInPictureMode) {
-                // Auto enter PiP when user leaves activity
-                try {
-                    enterPictureInPictureMode(PictureInPictureParams.Builder().build())
-                } catch (e: Exception) {
-                    e.printStackTrace()
+        
+        // Only enter PiP mode if player is initialized and we're not already in PiP mode
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && 
+            ::player.isInitialized && 
+            !isInPictureInPictureMode && 
+            isPlayerReady) {
+            
+            // Set flag to prevent ads when PiP is requested
+            isPipRequested = true
+            
+            try {
+                // Create PiP params with aspect ratio based on video dimensions
+                val videoRatio = if (player.videoFormat != null) {
+                    Rational(player.videoFormat!!.width, player.videoFormat!!.height)
+                } else {
+                    Rational(16, 9) // Default aspect ratio
                 }
+                
+                val params = PictureInPictureParams.Builder()
+                    .setAspectRatio(videoRatio)
+                    .build()
+                    
+                enterPictureInPictureMode(params)
+                
+                // Hide controls when entering PiP
+                binding.playerView.hideController()
+                binding.lockButton.visibility = View.GONE
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Failed to enter PiP mode: ${e.message}")
+                isPipRequested = false
             }
         }
     }
@@ -1242,6 +1287,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
         // Handle touch events
         binding.playerView.setOnTouchListener { _, motionEvent ->
+            // Don't process touch events when in PiP mode
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode) {
+                return@setOnTouchListener false
+            }
+            
             if (!isLocked) {
                 gestureDetectorCompat.onTouchEvent(motionEvent)
                 
@@ -1617,5 +1667,13 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    // Add this method to check if we're in PiP mode before showing ads
+    private fun shouldShowAd(): Boolean {
+        // Don't show ads for premium content, when PiP is requested, or when in PiP mode
+        return url?.contains("premium") != true && 
+               !isPipRequested && 
+               !(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode)
     }
 }
