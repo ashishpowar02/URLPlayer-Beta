@@ -304,10 +304,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private fun handleIntent(intent: Intent) {
         // First check for explicit URL extra (from our own app or other apps)
         //Ads Logic
+        url = intent.getStringExtra("URL")
+        userAgent = intent.getStringExtra("USER_AGENT")
+
         showInterstitialAd {
-            url = intent.getStringExtra("URL")
-            userAgent = intent.getStringExtra("USER_AGENT")
-            
+
             // If URL is null, try to get it from the data URI (VIEW intents)
             if (url == null && intent.action == Intent.ACTION_VIEW) {
                 val uri = intent.data
