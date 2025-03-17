@@ -191,6 +191,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     // Add at the top with other properties
     private var isPipRequested = false
 
+    // Add this property to track notch mode
+    private var isNotchModeEnabled = false
+
     private val castSessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {}
         
@@ -257,13 +260,8 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         // Force landscape orientation
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
-        // Hide system bars and make fullscreen
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, binding.root).let { controller ->
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = 
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
+        // Set up edge-to-edge display with notch support
+        setupEdgeToEdgeDisplay()
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -283,7 +281,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         gestureDetectorCompat = GestureDetectorCompat(this, this)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         volume = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
-
 
         setupPlayer()
         setupGestureControls()
@@ -692,6 +689,10 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
                     fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
+                    
+                    // Toggle notch mode when in zoom mode
+                    toggleNotchMode()
+                    
                     currentScreenMode = ScreenMode.FIT
                 }
             }
@@ -710,6 +711,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
             fullScreenButton.setImageResource(R.drawable.fullscreen_icon)
             currentScreenMode = ScreenMode.FIT
+            
+            // Disable notch mode
+            if (isNotchModeEnabled) {
+                toggleNotchMode()
+            }
         }
     }
 
@@ -1105,13 +1111,8 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
 
-        // Keep fullscreen in both orientations
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, binding.root).let { controller ->
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = 
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
+        // Reapply edge-to-edge settings
+        setupEdgeToEdgeDisplay()
 
         // Reset screen dimensions and recalculate subtitle size
         screenWidth = 0
@@ -1675,5 +1676,49 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         return url?.contains("premium") != true && 
                !isPipRequested && 
                !(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode)
+    }
+
+    // Add this method to set up edge-to-edge display with notch support
+    private fun setupEdgeToEdgeDisplay() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // Enable layout in cutout area
+            window.attributes.layoutInDisplayCutoutMode = 
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+
+        // Make the content draw behind system bars
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        
+        // Hide system bars
+        WindowInsetsControllerCompat(window, binding.root).let { controller ->
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = 
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    }
+
+    // Add this method to toggle notch mode
+    private fun toggleNotchMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            isNotchModeEnabled = !isNotchModeEnabled
+            
+            window.attributes.layoutInDisplayCutoutMode = if (isNotchModeEnabled) {
+                // Use the entire screen including notch area
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            } else {
+                // Avoid notch area
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+            }
+            
+            // Apply changes
+            window.attributes = window.attributes
+            
+            // Show toast with current notch mode
+            Toast.makeText(
+                this, 
+                if (isNotchModeEnabled) "Notch area enabled" else "Notch area disabled", 
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 }
