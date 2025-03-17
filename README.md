@@ -28,6 +28,11 @@ copylefted libre software app, gratis
 - Material Design UI
 - Navigation drawer with quick actions
 - Dark theme support
+- Picture-in-Picture (PiP) mode with ad-free experience
+- Fullscreen mode with notch support
+- Audio boost and quality control
+- Multiple screen modes (Fit, Fill, Zoom)
+- Gesture controls for brightness and volume
 
 ## Supported Formats
 
@@ -49,6 +54,50 @@ copylefted libre software app, gratis
 - RTP
 - MMS
 - SRT
+
+## Advanced Player Features
+
+### Picture-in-Picture Mode
+- Seamless PiP transition when leaving the app
+- Ad-free experience in PiP mode
+- Automatic aspect ratio adjustment
+- Continues playback when background
+- Smart ad management (no ads during PiP)
+
+### Screen Modes
+- Fit: Default mode that maintains aspect ratio
+- Fill: Stretches video to fill the screen
+- Zoom: Crops and zooms the video for fullscreen experience
+
+### Notch Support
+- Toggle notch area usage in fullscreen mode
+- Edge-to-edge display for maximum screen real estate
+- Adaptive layout for different device cutouts
+
+### Audio Enhancement
+- Audio boost up to 1500%
+- Customizable boost levels
+- Persistent audio settings
+
+## Technical Specifications
+
+### Build Configuration
+- Minimum SDK: 24 (Android 7.0)
+- Target SDK: 35 (Android 15)
+- Kotlin version: 1.9.0+
+- Java compatibility: 17
+- ExoPlayer for video playback
+- Google Cast framework integration
+- ViewBinding for efficient UI handling
+
+### Dependencies
+- ExoPlayer Core and UI components
+- DASH playback support
+- Material Design components
+- Firebase Analytics
+- Google Play Services Ads
+- Double Tap Player View for YouTube-style controls
+- Vertical SeekBar for audio boost control
 
 ## 📸 Screenshots 
 
