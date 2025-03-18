@@ -201,6 +201,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private var prePipScreenMode = ScreenMode.FILL
     private var prePipNotchEnabled = true
 
+    // Add this property to track if we're showing an ad
+    private var isShowingAd = false
+
     private val castSessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {}
 
@@ -318,12 +321,17 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         url = intent.getStringExtra("URL")
         userAgent = intent.getStringExtra("USER_AGENT")
 
-        // Check if we should show an ad based on PiP status
+        // Always show ad when not in PiP mode
         if (shouldShowAd()) {
-            // Show ad when not in PiP mode
-            showInterstitialAd(customCode = {
+            isShowingAd = true
+            showInterstitialAd {
+                isShowingAd = false
                 processUrlAndContinue(intent)
-            })
+                // Auto-play after ad closes
+                if (isPlayerReady) {
+                    playVideo()
+                }
+            }
         } else {
             // Skip ad and continue directly when in PiP mode
             processUrlAndContinue(intent)
@@ -1148,9 +1156,17 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             AudioManager.AUDIOFOCUS_GAIN
         )
         if (brightness != 0) setScreenBrightness(brightness)
-        if (isPlaying) {
+        
+        // Auto-play after returning from ad if we were showing an ad
+        if (isShowingAd) {
+            isShowingAd = false
+            if (isPlayerReady) {
+                playVideo()
+            }
+        } else if (isPlaying) {
             playVideo()
         }
+        
         if (::sessionManager.isInitialized) {
             sessionManager.addSessionManagerListener(castSessionManagerListener, CastSession::class.java)
         }
@@ -1706,7 +1722,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         }
     }
 
-    // Add this method to check if we're in PiP mode before showing ads
+    // Update the shouldShowAd method to always return true except in special cases
     private fun shouldShowAd(): Boolean {
         // Don't show ads for premium content, when PiP is requested, or when in PiP mode
         return url?.contains("premium") != true &&
