@@ -90,12 +90,12 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private var playbackPosition = 0L
     private var isPlayerReady = false
-    private var isFullscreen: Boolean = false
+    private var isFullscreen: Boolean = true
     private var url: String? = null
     private var userAgent: String? = null
     private lateinit var trackSelector: DefaultTrackSelector
     private var currentQuality = "Auto"
-    
+
     private data class VideoQuality(
         val height: Int,
         val width: Int,
@@ -134,33 +134,33 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         "mov" to "video/quicktime",
         "wmv" to "video/x-ms-wmv",
         "flv" to "video/x-flv",
-        
+
         // Streaming formats
         "m3u8" to "application/vnd.apple.mpegurl",  // Updated MIME type
         "m3u" to "application/vnd.apple.mpegurl",   // Updated MIME type
         "ts" to "video/mp2t",
         "mpd" to "application/dash+xml",
         "ism" to "application/vnd.ms-sstr+xml",
-        
+
         // Transport stream formats
         "mts" to "video/mp2t",
         "m2ts" to "video/mp2t",
-        
+
         // Legacy formats
         "mp2" to "video/mpeg",
         "mpg" to "video/mpeg",
         "mpeg" to "video/mpeg",
-        
+
         // Additional streaming formats
         "hls" to "application/vnd.apple.mpegurl",  // Updated MIME type
         "dash" to "application/dash+xml",
         "smooth" to "application/vnd.ms-sstr+xml",
-        
+
         // Playlist formats
         "pls" to "audio/x-scpls",
         "asx" to "video/x-ms-asf",
         "xspf" to "application/xspf+xml",
-        
+
         // Add DASH format
         "mpd" to "application/dash+xml",
     )
@@ -192,11 +192,18 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private var isPipRequested = false
 
     // Add this property to track notch mode
-    private var isNotchModeEnabled = false
+    private var isNotchModeEnabled = true
+
+    // Add this property to track if stream is live
+    private var isLiveStream = false
+
+    // Add these properties to track screen state before entering PiP
+    private var prePipScreenMode = ScreenMode.FILL
+    private var prePipNotchEnabled = true
 
     private val castSessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {}
-        
+
         override fun onSessionStarted(session: CastSession, sessionId: String) {
             castSession = session
             // Save current playback position
@@ -206,22 +213,22 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             // Pause local playback
             player.pause()
         }
-        
+
         override fun onSessionStartFailed(session: CastSession, error: Int) {
             Toast.makeText(this@PlayerActivity, "Failed to start casting", Toast.LENGTH_SHORT).show()
         }
-        
+
         override fun onSessionEnding(session: CastSession) {
             // Return to local playback
             val position = session.remoteMediaClient?.approximateStreamPosition ?: 0
             player.seekTo(position)
             player.playWhenReady = true
         }
-        
+
         override fun onSessionEnded(session: CastSession, error: Int) {
             castSession = null
         }
-        
+
         override fun onSessionResuming(session: CastSession, sessionId: String) {}
         override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) {
             castSession = session
@@ -249,7 +256,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     }
 
     // Add this property to track current screen mode
-    private var currentScreenMode = ScreenMode.FIT
+    private var currentScreenMode = ScreenMode.FILL
 
     @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -262,6 +269,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
         // Set up edge-to-edge display with notch support
         setupEdgeToEdgeDisplay()
+        
+        // Enable notch mode by default
+        isNotchModeEnabled = true
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -298,6 +308,9 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        
+        // Apply fullscreen mode by default
+        playInFullscreen(enable = true)
     }
 
     private fun handleIntent(intent: Intent) {
@@ -323,7 +336,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             val uri = intent.data
             if (uri != null) {
                 url = uri.toString()
-                
+
                 // Try to extract title from URI path if no channel name provided
                 if (intent.getStringExtra("CHANNEL_NAME") == null) {
                     val path = uri.path
@@ -333,18 +346,18 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                             .replace("_", " ")
                             .replace("-", " ")
                             .capitalize(Locale.getDefault())
-                        
+
                         intent.putExtra("CHANNEL_NAME", fileName)
                     }
                 }
             }
         }
-        
+
         // Set default user agent if not provided
         if (userAgent == null) {
             userAgent = Util.getUserAgent(this, "URLPlayerBeta")
         }
-        
+
         // Log the received intent data for debugging
         Log.d("PlayerActivity", "Received URL: $url")
         Log.d("PlayerActivity", "Channel Name: ${intent.getStringExtra("CHANNEL_NAME")}")
@@ -380,16 +393,23 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             fullScreenButton = playerView.findViewById(R.id.fullScreenBtn)
 
             // Set initial title from intent
-            val channelName = intent.getStringExtra("CHANNEL_NAME") 
+            val channelName = intent.getStringExtra("CHANNEL_NAME")
                 ?: url?.substringAfterLast('/')?.substringBeforeLast('.')
                 ?: getString(R.string.video_name)
-                
+
             videoTitle.text = channelName
             videoTitle.isSelected = true
 
             // Add cast button setup
             mediaRouteButton = playerView.findViewById(R.id.mediaRouteButton)
             CastButtonFactory.setUpMediaRouteButton(this, mediaRouteButton)
+            
+            // Move PiP button to controller layout
+            // This assumes you have a pipButton in your player control layout
+            val pipButton = playerView.findViewById<ImageButton>(R.id.pipModeBtn)
+            pipButton?.setOnClickListener {
+                enterPipMode()
+            }
 
         } catch (e: Exception) {
             e.printStackTrace()
@@ -469,7 +489,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             isLocked = !isLocked
             lockScreen(isLocked)
             binding.lockButton.setImageResource(
-                if (isLocked) R.drawable.close_lock_icon 
+                if (isLocked) R.drawable.close_lock_icon
                 else R.drawable.lock_open_icon
             )
         }
@@ -479,13 +499,13 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         val customDialog = LayoutInflater.from(this)
             .inflate(R.layout.more_features, binding.root, false)
         val bindingMF = MoreFeaturesBinding.bind(customDialog)
-        
+
         val dialog = MaterialAlertDialogBuilder(this)
             .setView(customDialog)
             .setOnCancelListener { playVideo() }
             .setBackground(ColorDrawable(0x803700B3.toInt()))
             .create()
-        
+
         dialog.show()
 
         // Handle audio booster click
@@ -501,7 +521,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             val subtitles = ArrayList<String>()
             val subtitlesList = ArrayList<String>()
             var hasSubtitles = false
-            
+
             // Get available subtitle tracks
             try {
                 for (group in player.currentTracksInfo.trackGroupInfos) {
@@ -512,11 +532,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                             val format = groupInfo.getFormat(i)
                             val language = format.language ?: "unknown"
                             val label = format.label ?: Locale(language).displayLanguage
-                            
+
                             subtitles.add(language)
                             subtitlesList.add(
-                                "${subtitlesList.size + 1}. $label" + 
-                                if (language != "unknown") " (${Locale(language).displayLanguage})" else ""
+                                "${subtitlesList.size + 1}. $label" +
+                                        if (language != "unknown") " (${Locale(language).displayLanguage})" else ""
                             )
                         }
                     }
@@ -528,7 +548,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 }
 
                 val tempTracks = subtitlesList.toArray(arrayOfNulls<CharSequence>(subtitlesList.size))
-                
+
                 MaterialAlertDialogBuilder(this, R.style.SubtitleDialogStyle)
                     .setTitle("Select Subtitles")
                     .setOnCancelListener { playVideo() }
@@ -550,7 +570,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                             )
                             Snackbar.make(
                                 playerView,
-                                "Selected: ${subtitlesList[position]}", 
+                                "Selected: ${subtitlesList[position]}",
                                 3000
                             ).show()
                         } catch (e: Exception) {
@@ -577,45 +597,14 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
         // Add PiP button click handler
         bindingMF.pipModeBtn.setOnClickListener {
-            val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-            val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                appOps.checkOpNoThrow(
-                    AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
-                    android.os.Process.myUid(),
-                    packageName
-                ) == AppOpsManager.MODE_ALLOWED
-            } else {
-                false
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (status) {
-                    // Enter PiP mode
-                    enterPictureInPictureMode(PictureInPictureParams.Builder().build())
-                    dialog.dismiss()
-                    binding.playerView.hideController()
-                    playVideo()
-                    pipStatus = 0
-                } else {
-                    // Open PiP settings if not enabled
-                    val intent = Intent(
-                        "android.settings.PICTURE_IN_PICTURE_SETTINGS",
-                        Uri.parse("package:$packageName")
-                    )
-                    startActivity(intent)
-                }
-            } else {
-                Toast.makeText(this, "Feature Not Supported!!", Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
-                playVideo()
-            }
+            enterPipMode()
         }
     }
 
     // Update the playVideo() method
     private fun playVideo() {
         if (!isPlayerReady) return
-        
+
         try {
             when (playbackState) {
                 PlaybackState.PAUSED, PlaybackState.ENDED -> {
@@ -683,35 +672,27 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
                     fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
                     currentScreenMode = ScreenMode.ZOOM
+                    
+                    // Enable notch mode when in FILL mode
+                    if (!isNotchModeEnabled) {
+                        toggleNotchMode()
+                    }
                 }
                 ScreenMode.ZOOM -> {
                     // Zoom and crop
                     binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
                     fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
-                    
-                    // Toggle notch mode when in zoom mode
-                    toggleNotchMode()
-                    
                     currentScreenMode = ScreenMode.FIT
                 }
             }
-            
-            // Show toast with current mode
-//            val modeText = when (currentScreenMode) {
-//                ScreenMode.FIT -> "Fit to Screen"
-//                ScreenMode.FILL -> "Fill Screen"
-//                ScreenMode.ZOOM -> "Zoom"
-//            }
-//            Toast.makeText(this, modeText, Toast.LENGTH_SHORT).show()
-            
         } else {
             // Reset to default fit mode
             binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
             fullScreenButton.setImageResource(R.drawable.fullscreen_icon)
             currentScreenMode = ScreenMode.FIT
-            
+
             // Disable notch mode
             if (isNotchModeEnabled) {
                 toggleNotchMode()
@@ -778,7 +759,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private fun buildQualityItems(qualities: List<VideoQuality>): List<String> {
         val items = mutableListOf("Auto (Recommended)")
-        
+
         qualities.forEach { quality ->
             val currentFormat = player.videoFormat
             val isCurrent = when {
@@ -786,7 +767,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 !isManualQualityControl -> currentFormat.height == quality.height
                 else -> currentQuality == quality.label
             }
-            
+
             val qualityText = buildString {
                 append(quality.label)
                 append(" - ")
@@ -795,24 +776,24 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             }
             items.add(qualityText)
         }
-        
+
         return items
     }
 
     private fun getAvailableQualities(): List<VideoQuality> {
         val tracks = mutableListOf<VideoQuality>()
-        
+
         try {
             player.currentTrackGroups.let { trackGroups ->
                 for (groupIndex in 0 until trackGroups.length) {
                     val group = trackGroups[groupIndex]
-                    
+
                     for (trackIndex in 0 until group.length) {
                         val format = group.getFormat(trackIndex)
-                        
+
                         if (format.height > 0 && format.width > 0) {
-                            availableQualities.find { 
-                                it.height == format.height 
+                            availableQualities.find {
+                                it.height == format.height
                             }?.let { tracks.add(it) }
                         }
                     }
@@ -821,7 +802,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        
+
         return tracks.distinct().sortedByDescending { it.height }
     }
 
@@ -906,7 +887,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     }
 
     private fun setupPlayer() {
-
         try {
             if (::player.isInitialized) {
                 player.release()
@@ -927,20 +907,27 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
                 .setAllowCrossProtocolRedirects(true)
 
+            // Check if this is a live stream
+            isLiveStream = url?.contains(".m3u8", ignoreCase = true) == true ||
+                    url?.contains(".m3u", ignoreCase = true) == true ||
+                    url?.contains("live", ignoreCase = true) == true ||
+                    url?.contains("stream", ignoreCase = true) == true
+
             // Create media source based on URL type
             val mediaItem = MediaItem.fromUri(url ?: return)
             val mediaSource = when {
                 // HLS streams
                 url?.endsWith(".m3u8", ignoreCase = true) == true ||
-                url?.endsWith(".m3u", ignoreCase = true) == true ||
-                url?.endsWith(".hls", ignoreCase = true) == true -> {
+                        url?.endsWith(".m3u", ignoreCase = true) == true ||
+                        url?.endsWith(".hls", ignoreCase = true) == true -> {
+                    isLiveStream = true
                     HlsMediaSource.Factory(dataSourceFactory)
                         .createMediaSource(mediaItem)
                 }
 
                 // DASH streams
                 url?.endsWith(".mpd", ignoreCase = true) == true ||
-                url?.contains("dash", ignoreCase = true) == true -> {
+                        url?.contains("dash", ignoreCase = true) == true -> {
                     DashMediaSource.Factory(dataSourceFactory)
                         .createMediaSource(mediaItem)
                 }
@@ -968,6 +955,18 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             player.seekTo(playbackPosition)
             player.playWhenReady = true
             player.prepare()
+
+            // Configure player view for live streams
+            if (isLiveStream) {
+                // Set controller timeout using the correct method
+                playerView.controllerShowTimeoutMs = 3500 // Show controls for 3.5 seconds
+                
+                // Set buffering display mode
+                playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                
+                // Set up progress updater for live streams
+                setupLiveProgressUpdater()
+            }
 
             // Add player listener
             player.addListener(object : Player.Listener {
@@ -1006,7 +1005,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     if (playing) {
                         playbackState = PlaybackState.PLAYING
                     } else if (playbackState != PlaybackState.BUFFERING &&
-                               playbackState != PlaybackState.ENDED) {
+                        playbackState != PlaybackState.ENDED) {
                         playbackState = PlaybackState.PAUSED
                     }
                     updatePlayPauseButton(playing)
@@ -1080,7 +1079,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     R.drawable.play_icon // Fallback to play icon
                 }
             )
-            
+
             playPauseButton.setOnClickListener {
                 player.seekTo(0)
                 playVideo()
@@ -1105,7 +1104,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        
+
         // Always force landscape mode
         if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -1201,13 +1200,16 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        
+
         if (isInPictureInPictureMode) {
             // Hide all UI controls when in PiP mode
             binding.playerView.hideController()
             binding.lockButton.visibility = View.GONE
             binding.brightnessIcon.visibility = View.GONE
             binding.volumeIcon.visibility = View.GONE
+            
+            // Disable controller completely to hide all UI elements
+            playerView.useController = false
             
             // Ensure video is playing when entering PiP
             if (isPlayerReady && !isPlaying) {
@@ -1216,9 +1218,41 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         } else {
             // Reset PiP flag when exiting PiP mode
             isPipRequested = false
-            
+
             // Show controls when exiting PiP mode
             binding.lockButton.visibility = View.VISIBLE
+            playerView.useController = true
+            
+            // Force controller to update
+            playerView.showController()
+            
+            // Restore previous screen mode and notch settings
+            if (prePipScreenMode != currentScreenMode) {
+                // Apply the saved screen mode
+                when (prePipScreenMode) {
+                    ScreenMode.FIT -> {
+                        binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                    }
+                    ScreenMode.FILL -> {
+                        binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                        player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                    }
+                    ScreenMode.ZOOM -> {
+                        binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                    }
+                }
+                currentScreenMode = prePipScreenMode
+                
+                // Update fullscreen button icon
+                fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
+            }
+            
+            // Restore notch mode if needed
+            if (prePipNotchEnabled != isNotchModeEnabled) {
+                toggleNotchMode()
+            }
             
             // Handle navigation based on pipStatus
             if (pipStatus != 0) {
@@ -1236,16 +1270,16 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        
+
         // Only enter PiP mode if player is initialized and we're not already in PiP mode
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && 
-            ::player.isInitialized && 
-            !isInPictureInPictureMode && 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            ::player.isInitialized &&
+            !isInPictureInPictureMode &&
             isPlayerReady) {
-            
+
             // Set flag to prevent ads when PiP is requested
             isPipRequested = true
-            
+
             try {
                 // Create PiP params with aspect ratio based on video dimensions
                 val videoRatio = if (player.videoFormat != null) {
@@ -1253,13 +1287,13 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 } else {
                     Rational(16, 9) // Default aspect ratio
                 }
-                
+
                 val params = PictureInPictureParams.Builder()
                     .setAspectRatio(videoRatio)
                     .build()
-                    
+
                 enterPictureInPictureMode(params)
-                
+
                 // Hide controls when entering PiP
                 binding.playerView.hideController()
                 binding.lockButton.visibility = View.GONE
@@ -1273,7 +1307,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     @SuppressLint("ClickableViewAccessibility")
     private fun setupGestureControls() {
         binding.playerView.player = player
-        
+
         // Setup YouTube style overlay
         binding.ytOverlay.performListener(object : YouTubeOverlay.PerformListener {
             override fun onAnimationEnd() {
@@ -1292,19 +1326,19 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode) {
                 return@setOnTouchListener false
             }
-            
+
             if (!isLocked) {
                 gestureDetectorCompat.onTouchEvent(motionEvent)
-                
+
                 if (motionEvent.action == MotionEvent.ACTION_UP) {
                     binding.brightnessIcon.visibility = View.GONE
                     binding.volumeIcon.visibility = View.GONE
-                    
+
                     // For immersive mode
                     WindowCompat.setDecorFitsSystemWindows(window, false)
                     WindowInsetsControllerCompat(window, binding.root).let { controller ->
                         controller.hide(WindowInsetsCompat.Type.systemBars())
-                        controller.systemBarsBehavior = 
+                        controller.systemBarsBehavior =
                             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                     }
                 }
@@ -1320,14 +1354,14 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         distanceY: Float
     ): Boolean {
         if (isLocked) return false
-        
+
         minSwipeY += distanceY
 
         val sWidth = Resources.getSystem().displayMetrics.widthPixels
         val sHeight = Resources.getSystem().displayMetrics.heightPixels
 
         val border = 100 * Resources.getSystem().displayMetrics.density.toInt()
-        if (event.x < border || event.y < border || 
+        if (event.x < border || event.y < border ||
             event.x > sWidth - border || event.y > sHeight - border)
             return false
 
@@ -1375,12 +1409,12 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         try {
             // Create new LoudnessEnhancer with player's audio session
             loudnessEnhancer = LoudnessEnhancer(player.audioSessionId)
-            
+
             // Restore saved settings
             val prefs = getSharedPreferences("audio_settings", Context.MODE_PRIVATE)
             boostLevel = prefs.getInt("boost_level", 0)
             isBoostEnabled = prefs.getBoolean("boost_enabled", false)
-            
+
             // Apply saved settings
             loudnessEnhancer.enabled = isBoostEnabled
             if (isBoostEnabled && boostLevel > 0) {
@@ -1396,13 +1430,13 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         val customDialogB = LayoutInflater.from(this)
             .inflate(R.layout.booster, binding.root, false)
         val bindingB = BoosterBinding.bind(customDialogB)
-        
+
         // Set initial values
         bindingB.verticalBar.apply {
             progress = boostLevel
             // The max value should be set in XML via app:vsb_max_value="15"
         }
-        
+
         val dialogB = MaterialAlertDialogBuilder(this)
             .setView(customDialogB)
             .setTitle("Audio Boost")
@@ -1412,11 +1446,11 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     // Update boost level
                     boostLevel = bindingB.verticalBar.progress
                     isBoostEnabled = boostLevel > 0
-                    
+
                     // Apply settings
                     loudnessEnhancer.enabled = isBoostEnabled
                     loudnessEnhancer.setTargetGain(boostLevel * 100)
-                    
+
                     // Save settings
                     getSharedPreferences("audio_settings", Context.MODE_PRIVATE)
                         .edit()
@@ -1425,12 +1459,12 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                         .apply()
 
                     // Show feedback
-                    val message = if (isBoostEnabled) 
-                        "Audio boost set to ${boostLevel * 10}%" 
-                    else 
+                    val message = if (isBoostEnabled)
+                        "Audio boost set to ${boostLevel * 10}%"
+                    else
                         "Audio boost disabled"
                     Snackbar.make(binding.root, message, Snackbar.LENGTH_SHORT).show()
-                    
+
                 } catch (e: Exception) {
                     Toast.makeText(this, "Error setting audio boost", Toast.LENGTH_SHORT).show()
                     e.printStackTrace()
@@ -1446,14 +1480,14 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     bindingB.verticalBar.progress = 0
                     loudnessEnhancer.enabled = false
                     loudnessEnhancer.setTargetGain(0)
-                    
+
                     // Save reset state
                     getSharedPreferences("audio_settings", Context.MODE_PRIVATE)
                         .edit()
                         .putInt("boost_level", 0)
                         .putBoolean("boost_enabled", false)
                         .apply()
-                        
+
                     Snackbar.make(binding.root, "Audio boost reset", Snackbar.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     Toast.makeText(this, "Error resetting audio boost", Toast.LENGTH_SHORT).show()
@@ -1471,7 +1505,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 "Audio Boost\n\nOff"
             }
         }
-        
+
         updateProgressText(boostLevel)
 
         // Update progress text while sliding
@@ -1485,30 +1519,32 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private fun loadRemoteMedia(position: Long = 0) {
         val castSession = castSession ?: return
         val remoteMediaClient = castSession.remoteMediaClient ?: return
-        
+
         try {
             // Create media metadata
             val videoMetadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE)
             val title = intent.getStringExtra("CHANNEL_NAME") ?: getString(R.string.video_name)
             videoMetadata.putString(MediaMetadata.KEY_TITLE, title)
-            
+
             // Get correct MIME type and stream type
             val mimeType = getMimeType(url)
             val streamType = when {
                 // HLS streams
-                url?.contains(".m3u8", ignoreCase = true) == true || 
-                url?.contains("playlist", ignoreCase = true) == true -> 
+                url?.contains(".m3u8", ignoreCase = true) == true ||
+                        url?.contains(".m3u", ignoreCase = true) == true ||
+                        url?.contains("live", ignoreCase = true) == true ||
+                        url?.contains("stream", ignoreCase = true) == true ->
                     MediaInfo.STREAM_TYPE_LIVE
-                
+
                 // DASH streams
                 url?.contains("dash", ignoreCase = true) == true ||
-                mimeType == "application/dash+xml" ->
+                        mimeType == "application/dash+xml" ->
                     MediaInfo.STREAM_TYPE_BUFFERED
-                
+
                 // Progressive streams (MP4, WebM etc)
-                mimeType.startsWith("video/") -> 
+                mimeType.startsWith("video/") ->
                     MediaInfo.STREAM_TYPE_BUFFERED
-                
+
                 // Default to buffered
                 else -> MediaInfo.STREAM_TYPE_BUFFERED
             }
@@ -1525,7 +1561,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     }
                 }
                 .build()
-            
+
             // Load media with options
             val loadRequestData = MediaLoadRequestData.Builder()
                 .setMediaInfo(mediaInfo)
@@ -1537,7 +1573,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                     }
                 }
                 .build()
-            
+
             // Add result listener with enhanced error handling
             remoteMediaClient.load(loadRequestData)
                 .addStatusListener { result ->
@@ -1583,18 +1619,18 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
     private fun getMimeType(url: String?): String {
         if (url == null) return "video/mp4"
-        
+
         return try {
             // First check for streaming formats
             val lowercaseUrl = url.lowercase()
             when {
                 // HLS streams
-                lowercaseUrl.endsWith(".m3u8") || 
-                lowercaseUrl.endsWith(".m3u") -> "application/vnd.apple.mpegurl"
-                
+                lowercaseUrl.endsWith(".m3u8") ||
+                        lowercaseUrl.endsWith(".m3u") -> "application/vnd.apple.mpegurl"
+
                 // DASH streams
                 lowercaseUrl.endsWith(".mpd") -> "application/dash+xml"
-                
+
                 // Then check file extension
                 else -> {
                     val extension = url.substringAfterLast('.', "").lowercase()
@@ -1625,10 +1661,10 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         // For 1080p width, default size would be 20sp
         val baseSize = 20f
         val baseWidth = 1080f
-        
+
         // Calculate scaled size based on screen width
         val scaledSize = (screenWidth / baseWidth) * baseSize
-        
+
         // Clamp the size between min and max values
         return scaledSize.coerceIn(16f, 26f)
     }
@@ -1637,7 +1673,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private fun applySubtitleStyle() {
         try {
             val subtitleSize = calculateSubtitleSize()
-            
+
             // Create subtitle style
             val style = CaptionStyleCompat(
                 Color.WHITE,                      // Text color
@@ -1650,15 +1686,15 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
             // Apply style to player view
             playerView.subtitleView?.setStyle(style)
-            
+
             // Set text size
             playerView.subtitleView?.setFixedTextSize(TypedValue.COMPLEX_UNIT_SP, subtitleSize)
-            
+
             // Center align subtitles and position them slightly above bottom
             playerView.subtitleView?.let { subtitleView ->
                 subtitleView.setApplyEmbeddedStyles(true)
                 subtitleView.setApplyEmbeddedFontSizes(false)
-                
+
                 // Position subtitles slightly above bottom (90% from top)
                 val params = subtitleView.layoutParams as FrameLayout.LayoutParams
                 params.gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
@@ -1673,26 +1709,26 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     // Add this method to check if we're in PiP mode before showing ads
     private fun shouldShowAd(): Boolean {
         // Don't show ads for premium content, when PiP is requested, or when in PiP mode
-        return url?.contains("premium") != true && 
-               !isPipRequested && 
-               !(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode)
+        return url?.contains("premium") != true &&
+                !isPipRequested &&
+                !(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode)
     }
 
     // Add this method to set up edge-to-edge display with notch support
     private fun setupEdgeToEdgeDisplay() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             // Enable layout in cutout area
-            window.attributes.layoutInDisplayCutoutMode = 
+            window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
 
         // Make the content draw behind system bars
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        
+
         // Hide system bars
         WindowInsetsControllerCompat(window, binding.root).let { controller ->
             controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = 
+            controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
@@ -1701,7 +1737,7 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
     private fun toggleNotchMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             isNotchModeEnabled = !isNotchModeEnabled
-            
+
             window.attributes.layoutInDisplayCutoutMode = if (isNotchModeEnabled) {
                 // Use the entire screen including notch area
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
@@ -1709,16 +1745,107 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 // Avoid notch area
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
             }
-            
+
             // Apply changes
             window.attributes = window.attributes
-            
-            // Show toast with current notch mode
-            Toast.makeText(
-                this, 
-                if (isNotchModeEnabled) "Notch area enabled" else "Notch area disabled", 
-                Toast.LENGTH_SHORT
-            ).show()
+        }
+    }
+
+    // Add this method to update progress for live streams
+    private fun setupLiveProgressUpdater() {
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val updateInterval = 1000L // Update every second
+        
+        val runnable = object : Runnable {
+            override fun run() {
+                if (isLiveStream && isPlayerReady && !isInPictureInPictureMode) {
+                    // Force the player view to update its UI
+                    playerView.invalidate()
+                    
+                    // Update player state
+                    if (player.isPlaying) {
+                        // Ensure we're showing the correct buffering state
+                        val bufferedPosition = player.bufferedPosition
+                        val duration = player.duration
+                        
+                        if (duration > 0) {
+                            // We have a valid duration, update any custom UI if needed
+                            val bufferedPercentage = (bufferedPosition * 100 / duration).toInt()
+                            // You could update a custom progress bar here if needed
+                        }
+                    }
+                }
+                
+                // Schedule next update
+                if (isPlayerReady && !isDestroyed) {
+                    handler.postDelayed(this, updateInterval)
+                }
+            }
+        }
+        
+        // Start the updater
+        handler.post(runnable)
+    }
+
+    // Add this method to handle PiP mode entry
+    private fun enterPipMode() {
+        val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                android.os.Process.myUid(),
+                packageName
+            ) == AppOpsManager.MODE_ALLOWED
+        } else {
+            false
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (status) {
+                // Save current state before entering PiP
+                prePipScreenMode = currentScreenMode
+                prePipNotchEnabled = isNotchModeEnabled
+                
+                // Hide controls immediately before entering PiP
+                binding.playerView.hideController()
+                binding.lockButton.visibility = View.GONE
+                binding.brightnessIcon.visibility = View.GONE
+                binding.volumeIcon.visibility = View.GONE
+                
+                // Enter PiP mode
+                try {
+                    // Create PiP params with aspect ratio based on video dimensions
+                    val videoRatio = if (player.videoFormat != null) {
+                        Rational(player.videoFormat!!.width, player.videoFormat!!.height)
+                    } else {
+                        Rational(16, 9) // Default aspect ratio
+                    }
+
+                    val params = PictureInPictureParams.Builder()
+                        .setAspectRatio(videoRatio)
+                        .build()
+
+                    enterPictureInPictureMode(params)
+                    
+                    // Set flag to prevent ads when PiP is requested
+                    isPipRequested = true
+                    
+                    // Ensure video is playing
+                    playVideo()
+                } catch (e: Exception) {
+                    Log.e("PlayerActivity", "Failed to enter PiP mode: ${e.message}")
+                    Toast.makeText(this, "Failed to enter PiP mode", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                // Open PiP settings if not enabled
+                val intent = Intent(
+                    "android.settings.PICTURE_IN_PICTURE_SETTINGS",
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+            }
+        } else {
+            Toast.makeText(this, "Feature Not Supported!!", Toast.LENGTH_SHORT).show()
         }
     }
 }
