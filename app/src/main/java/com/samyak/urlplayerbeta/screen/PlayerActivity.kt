@@ -361,6 +361,23 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             }
         }
 
+        // Handle PHP-based stream URLs with query parameters
+        if (url?.contains(".php") == true && url?.contains("?") == true || 
+            url?.contains(".m3u8") == true && url?.contains("?") == true) {
+            // Extract channel ID or name from URL parameters if available
+            val channelParam = url?.substringAfter("?")?.split("&")
+                ?.find { it.startsWith("id=") || it.startsWith("c=") || it.startsWith("channel=") }
+                ?.substringAfter("=")
+            
+            if (channelParam != null && intent.getStringExtra("CHANNEL_NAME") == null) {
+                val channelName = channelParam.replace("_", " ")
+                    .replace("-", " ")
+                    .capitalize(Locale.getDefault())
+                
+                intent.putExtra("CHANNEL_NAME", channelName)
+            }
+        }
+
         // Set default user agent if not provided
         if (userAgent == null) {
             userAgent = Util.getUserAgent(this, "URLPlayerBeta")
@@ -500,112 +517,6 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
                 if (isLocked) R.drawable.close_lock_icon
                 else R.drawable.lock_open_icon
             )
-        }
-    }
-
-    private fun showMoreFeaturesDialog() {
-        val customDialog = LayoutInflater.from(this)
-            .inflate(R.layout.more_features, binding.root, false)
-        val bindingMF = MoreFeaturesBinding.bind(customDialog)
-
-        val dialog = MaterialAlertDialogBuilder(this)
-            .setView(customDialog)
-            .setOnCancelListener { playVideo() }
-            .setBackground(ColorDrawable(0x803700B3.toInt()))
-            .create()
-
-        dialog.show()
-
-        // Handle audio booster click
-        bindingMF.audioBooster.setOnClickListener {
-            dialog.dismiss()
-            showAudioBoosterDialog()
-        }
-
-        // Add subtitle button click listener
-        bindingMF.subtitlesBtn.setOnClickListener {
-            dialog.dismiss()
-            playVideo()
-            val subtitles = ArrayList<String>()
-            val subtitlesList = ArrayList<String>()
-            var hasSubtitles = false
-
-            // Get available subtitle tracks
-            try {
-                for (group in player.currentTracksInfo.trackGroupInfos) {
-                    if (group.trackType == C.TRACK_TYPE_TEXT) {
-                        hasSubtitles = true
-                        val groupInfo = group.trackGroup
-                        for (i in 0 until groupInfo.length) {
-                            val format = groupInfo.getFormat(i)
-                            val language = format.language ?: "unknown"
-                            val label = format.label ?: Locale(language).displayLanguage
-
-                            subtitles.add(language)
-                            subtitlesList.add(
-                                "${subtitlesList.size + 1}. $label" +
-                                        if (language != "unknown") " (${Locale(language).displayLanguage})" else ""
-                            )
-                        }
-                    }
-                }
-
-                if (!hasSubtitles) {
-                    Toast.makeText(this, "No subtitles available for this video", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-
-                val tempTracks = subtitlesList.toArray(arrayOfNulls<CharSequence>(subtitlesList.size))
-
-                MaterialAlertDialogBuilder(this, R.style.SubtitleDialogStyle)
-                    .setTitle("Select Subtitles")
-                    .setOnCancelListener { playVideo() }
-                    .setPositiveButton("Off Subtitles") { self, _ ->
-                        trackSelector.setParameters(
-                            trackSelector.buildUponParameters()
-                                .setRendererDisabled(C.TRACK_TYPE_TEXT, true)
-                        )
-                        self.dismiss()
-                        playVideo()
-                        Snackbar.make(playerView, "Subtitles disabled", 3000).show()
-                    }
-                    .setItems(tempTracks) { _, position ->
-                        try {
-                            trackSelector.setParameters(
-                                trackSelector.buildUponParameters()
-                                    .setRendererDisabled(C.TRACK_TYPE_TEXT, false)
-                                    .setPreferredTextLanguage(subtitles[position])
-                            )
-                            Snackbar.make(
-                                playerView,
-                                "Selected: ${subtitlesList[position]}",
-                                3000
-                            ).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(this, "Error selecting subtitles", Toast.LENGTH_SHORT).show()
-                        }
-                        playVideo()
-                    }
-                    .setBackground(ColorDrawable(0x803700B3.toInt()))
-                    .create()
-                    .apply {
-                        show()
-                        getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.WHITE)
-                    }
-            } catch (e: Exception) {
-                Toast.makeText(this, "Error loading subtitles", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        // Video Quality button in more features dialog
-        bindingMF.videoQuality.setOnClickListener {
-            dialog.dismiss()
-            showQualityDialog()
-        }
-
-        // Add PiP button click handler
-        bindingMF.pipModeBtn.setOnClickListener {
-            enterPipMode()
         }
     }
 
@@ -910,22 +821,29 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
 
             playerView.player = player
 
-            // Create data source factory
+            // Create data source factory with enhanced headers for PHP streams
             val dataSourceFactory = DefaultHttpDataSource.Factory()
                 .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
                 .setAllowCrossProtocolRedirects(true)
+                .setDefaultRequestProperties(mapOf(
+                    "Referer" to (url ?: ""),
+                    "Accept" to "*/*",
+                    "Origin" to "https://${Uri.parse(url)?.host ?: ""}"
+                ))
 
             // Check if this is a live stream
             isLiveStream = url?.contains(".m3u8", ignoreCase = true) == true ||
                     url?.contains(".m3u", ignoreCase = true) == true ||
                     url?.contains("live", ignoreCase = true) == true ||
-                    url?.contains("stream", ignoreCase = true) == true
+                    url?.contains("stream", ignoreCase = true) == true ||
+                    url?.contains(".php", ignoreCase = true) == true // PHP streams are typically live
 
             // Create media source based on URL type
             val mediaItem = MediaItem.fromUri(url ?: return)
             val mediaSource = when {
                 // HLS streams
                 url?.endsWith(".m3u8", ignoreCase = true) == true ||
+                        url?.contains(".m3u8?", ignoreCase = true) == true ||  // Added support for query params
                         url?.endsWith(".m3u", ignoreCase = true) == true ||
                         url?.endsWith(".hls", ignoreCase = true) == true -> {
                     isLiveStream = true
@@ -1862,6 +1780,112 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
             }
         } else {
             Toast.makeText(this, "Feature Not Supported!!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showMoreFeaturesDialog() {
+        val customDialog = LayoutInflater.from(this)
+            .inflate(R.layout.more_features, binding.root, false)
+        val bindingMF = MoreFeaturesBinding.bind(customDialog)
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setView(customDialog)
+            .setOnCancelListener { playVideo() }
+            .setBackground(ColorDrawable(0x803700B3.toInt()))
+            .create()
+
+        dialog.show()
+
+        // Handle audio booster click
+        bindingMF.audioBooster.setOnClickListener {
+            dialog.dismiss()
+            showAudioBoosterDialog()
+        }
+
+        // Add subtitle button click listener
+        bindingMF.subtitlesBtn.setOnClickListener {
+            dialog.dismiss()
+            playVideo()
+            val subtitles = ArrayList<String>()
+            val subtitlesList = ArrayList<String>()
+            var hasSubtitles = false
+
+            // Get available subtitle tracks
+            try {
+                for (group in player.currentTracksInfo.trackGroupInfos) {
+                    if (group.trackType == C.TRACK_TYPE_TEXT) {
+                        hasSubtitles = true
+                        val groupInfo = group.trackGroup
+                        for (i in 0 until groupInfo.length) {
+                            val format = groupInfo.getFormat(i)
+                            val language = format.language ?: "unknown"
+                            val label = format.label ?: Locale(language).displayLanguage
+
+                            subtitles.add(language)
+                            subtitlesList.add(
+                                "${subtitlesList.size + 1}. $label" +
+                                        if (language != "unknown") " (${Locale(language).displayLanguage})" else ""
+                            )
+                        }
+                    }
+                }
+
+                if (!hasSubtitles) {
+                    Toast.makeText(this, "No subtitles available for this video", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                val tempTracks = subtitlesList.toArray(arrayOfNulls<CharSequence>(subtitlesList.size))
+
+                MaterialAlertDialogBuilder(this, R.style.SubtitleDialogStyle)
+                    .setTitle("Select Subtitles")
+                    .setOnCancelListener { playVideo() }
+                    .setPositiveButton("Off Subtitles") { self, _ ->
+                        trackSelector.setParameters(
+                            trackSelector.buildUponParameters()
+                                .setRendererDisabled(C.TRACK_TYPE_TEXT, true)
+                        )
+                        self.dismiss()
+                        playVideo()
+                        Snackbar.make(playerView, "Subtitles disabled", 3000).show()
+                    }
+                    .setItems(tempTracks) { _, position ->
+                        try {
+                            trackSelector.setParameters(
+                                trackSelector.buildUponParameters()
+                                    .setRendererDisabled(C.TRACK_TYPE_TEXT, false)
+                                    .setPreferredTextLanguage(subtitles[position])
+                            )
+                            Snackbar.make(
+                                playerView,
+                                "Selected: ${subtitlesList[position]}",
+                                3000
+                            ).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Error selecting subtitles", Toast.LENGTH_SHORT).show()
+                        }
+                        playVideo()
+                    }
+                    .setBackground(ColorDrawable(0x803700B3.toInt()))
+                    .create()
+                    .apply {
+                        show()
+                        getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(Color.WHITE)
+                    }
+            } catch (e: Exception) {
+                Toast.makeText(this, "Error loading subtitles", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Video Quality button in more features dialog
+        bindingMF.videoQuality.setOnClickListener {
+            dialog.dismiss()
+            showQualityDialog()
+        }
+
+        // Add PiP button click handler
+        bindingMF.pipModeBtn.setOnClickListener {
+            enterPipMode()
         }
     }
 }

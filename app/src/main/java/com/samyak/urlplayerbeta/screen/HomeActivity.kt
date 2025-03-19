@@ -94,7 +94,17 @@ class HomeActivity : AppCompatActivity() {
 
     private fun launchPlayerActivity(video: Videos) {
         showInterstitialAd(customCode = {
-            startPlayerActivity(video)
+            val url = video.url.lowercase()
+            // Check if this is a playlist file using more comprehensive pattern matching
+            if (url.endsWith(".m3u") || 
+                url.endsWith(".m3u8") && url.contains("playlist") ||
+                url.contains("playlist") || 
+                url.contains("/list/") ||
+                url.contains("channel")) {
+                startPlaylistActivity(video)
+            } else {
+                startPlayerActivity(video)
+            }
         })
     }
 
@@ -102,6 +112,16 @@ class HomeActivity : AppCompatActivity() {
         Intent(this, PlayerActivity::class.java).also { intent ->
             intent.putExtra("URL", video.url)
             intent.putExtra("USER_AGENT", video.userAgent)
+            intent.putExtra("TITLE", video.name)
+            startActivity(intent)
+        }
+    }
+
+    private fun startPlaylistActivity(video: Videos) {
+        Intent(this, PlaylistActivity::class.java).also { intent ->
+            intent.putExtra("URL", video.url)
+            intent.putExtra("USER_AGENT", video.userAgent)
+            intent.putExtra("TITLE", video.name)
             startActivity(intent)
         }
     }

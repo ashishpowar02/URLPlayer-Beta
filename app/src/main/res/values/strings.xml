@@ -136,4 +136,10 @@
 
     <string name="about">About</string>
 
+    <!-- Add these to your existing strings.xml file -->
+    <string name="playlist">Playlist</string>
+    <string name="error_invalid_playlist">Invalid playlist URL</string>
+    <string name="error_loading_playlist">Error loading playlist</string>
+    <string name="no_playlist_items_found">No playlist items found</string>
+
 </resources>

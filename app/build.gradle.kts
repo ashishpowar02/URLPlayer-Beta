@@ -82,6 +82,9 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation(libs.firebase.database.ktx)
 
+    implementation ("com.github.bumptech.glide:glide:4.12.0")
+    annotationProcessor ("com.github.bumptech.glide:compiler:4.12.0")
+
 
     // Gauge Library
 //    implementation("com.github.Gruzer:simple-gauge-android:0.3.1")
