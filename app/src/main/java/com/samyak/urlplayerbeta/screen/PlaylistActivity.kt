@@ -3,17 +3,21 @@ package com.samyak.urlplayerbeta.screen
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SearchView
 import androidx.appcompat.widget.Toolbar
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.samyak.urlplayerbeta.R
 import com.samyak.urlplayerbeta.adapters.PlaylistItemAdapter
 import com.samyak.urlplayerbeta.databinding.ActivityPlaylistBinding
 import com.samyak.urlplayerbeta.models.PlaylistItem
 import com.samyak.urlplayerbeta.utils.ChannelItemDecoration
+import com.samyak.urlplayerbeta.utils.GridSpacingItemDecoration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,6 +34,11 @@ class PlaylistActivity : AppCompatActivity() {
     private var playlistUrl: String? = null
     private var playlistName: String? = null
     private var userAgent: String? = null
+    private var allPlaylistItems = listOf<PlaylistItem>()
+
+    companion object {
+        private const val GRID_SPAN_COUNT = 3
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,10 +72,14 @@ class PlaylistActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
+
+        val spanCount = GRID_SPAN_COUNT
+        // Get spacing dimension
+        val spacing = resources.getDimensionPixelSize(R.dimen.grid_spacing)
         recyclerView = binding.playlistRecyclerView
         recyclerView.apply {
-            layoutManager = LinearLayoutManager(this@PlaylistActivity)
-            addItemDecoration(ChannelItemDecoration(resources.getDimensionPixelSize(R.dimen.item_spacing)))
+            layoutManager = GridLayoutManager(this@PlaylistActivity, spanCount)
+            addItemDecoration(GridSpacingItemDecoration(spanCount, spacing, true))
             setHasFixedSize(true)
         }
 
@@ -91,6 +104,7 @@ class PlaylistActivity : AppCompatActivity() {
                     if (playlistItems.isEmpty()) {
                         binding.emptyStateView.visibility = View.VISIBLE
                     } else {
+                        allPlaylistItems = playlistItems
                         adapter.updateItems(playlistItems)
                         binding.playlistRecyclerView.visibility = View.VISIBLE
                     }
@@ -558,5 +572,46 @@ class PlaylistActivity : AppCompatActivity() {
         }
         
         return path.substringBeforeLast('.').ifEmpty { "channel" }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.playlist_menu, menu)
+        
+        val searchItem = menu.findItem(R.id.action_search)
+        val searchView = searchItem.actionView as SearchView
+        
+        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                return false
+            }
+            
+            override fun onQueryTextChange(newText: String?): Boolean {
+                filterPlaylist(newText)
+                return true
+            }
+        })
+        
+        return true
+    }
+    
+    private fun filterPlaylist(query: String?) {
+        if (query.isNullOrBlank()) {
+            adapter.updateItems(allPlaylistItems)
+            return
+        }
+        
+        val filteredList = allPlaylistItems.filter { item ->
+            item.title.contains(query, ignoreCase = true) || 
+            (item.group?.contains(query, ignoreCase = true) ?: false)
+        }
+        
+        adapter.updateItems(filteredList)
+        
+        // Show empty state if no results found
+        if (filteredList.isEmpty()) {
+            binding.emptyStateView.visibility = View.VISIBLE
+        } else {
+            binding.emptyStateView.visibility = View.GONE
+        }
     }
 } 

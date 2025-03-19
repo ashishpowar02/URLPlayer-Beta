@@ -141,5 +141,9 @@
     <string name="error_invalid_playlist">Invalid playlist URL</string>
     <string name="error_loading_playlist">Error loading playlist</string>
     <string name="no_playlist_items_found">No playlist items found</string>
+    <string name="language">Language</string>
+
+    <string name="select_language">Select Language</string>
+    <string name="language_changed">Language changed successfully</string>
 
 </resources>

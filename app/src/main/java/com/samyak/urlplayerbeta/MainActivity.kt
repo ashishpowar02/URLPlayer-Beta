@@ -19,6 +19,9 @@ import com.google.android.play.core.install.InstallStateUpdatedListener
 import com.google.android.play.core.install.model.InstallStatus
 import com.samyak.urlplayerbeta.AdManage.loadBannerAd
 import com.samyak.urlplayerbeta.utils.AppConstants
+import com.samyak.urlplayerbeta.utils.LanguageManager
+import java.util.Locale
+import android.content.Context
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -46,6 +49,34 @@ class MainActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Auto-detect system language on first run
+        val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
+        if (!prefs.contains("language_set")) {
+            // Get system language
+            val systemLang = Locale.getDefault().language
+            
+            // Check if we support this language
+            val supportedLanguages = LanguageManager.getSupportedLanguages()
+            val isSupported = supportedLanguages.any { it.second == systemLang }
+            
+            if (isSupported) {
+                // Set app language to system language
+                prefs.edit()
+                    .putString("language", systemLang)
+                    .putBoolean("language_set", true)
+                    .apply()
+                
+                // Recreate to apply language
+                recreate()
+            } else {
+                // Mark as set but keep default (English)
+                prefs.edit()
+                    .putBoolean("language_set", true)
+                    .apply()
+            }
+        }
+        
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 

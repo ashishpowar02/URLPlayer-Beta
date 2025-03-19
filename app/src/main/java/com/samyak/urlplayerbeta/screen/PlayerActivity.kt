@@ -68,8 +68,11 @@ import android.util.Log
 import com.google.android.exoplayer2.source.dash.DashMediaSource
 import com.samyak.urlplayerbeta.AdManage.showInterstitialAd
 import android.util.Rational
+import android.widget.AbsListView
+import com.samyak.urlplayerbeta.base.BaseActivity
+import com.samyak.urlplayerbeta.utils.LanguageManager
 
-class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
+class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
     private lateinit var player: ExoPlayer
     private lateinit var playerView: PlayerView
@@ -1887,5 +1890,66 @@ class PlayerActivity : AppCompatActivity(), GestureDetector.OnGestureListener {
         bindingMF.pipModeBtn.setOnClickListener {
             enterPipMode()
         }
+
+        // Add language button click handler
+        bindingMF.languageBtn.setOnClickListener {
+            dialog.dismiss()
+            showLanguageDialog()
+        }
+    }
+
+    // Add this new method
+    private fun showLanguageDialog() {
+        val languages = LanguageManager.getSupportedLanguages()
+        
+        // Get current language code
+        val currentLang = LanguageManager.getCurrentLanguage(this)
+        
+        // Find current selection index
+        val currentIndex = languages.indexOfFirst { it.second == currentLang }.coerceAtLeast(0)
+        
+        // Create items array
+        val items = languages.map { it.first }.toTypedArray()
+        
+        val dialog = MaterialAlertDialogBuilder(this, R.style.AlertDialogCustom)
+            .setTitle(getString(R.string.select_language))
+            .setSingleChoiceItems(items, currentIndex) { dialog, which ->
+                val (_, langCode) = languages[which]
+                
+                // Use language manager to set language
+                LanguageManager.setLanguage(this, langCode)
+                
+                dialog.dismiss()
+                
+                // Show confirmation
+                Toast.makeText(this, getString(R.string.language_changed), Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(getString(R.string.cancel)) { dialog, _ ->
+                dialog.dismiss()
+                playVideo()
+            }
+            .setBackground(ColorDrawable(0x803700B3.toInt()))
+            .create()
+        
+        // Apply styling
+        dialog.setOnShowListener { dialogInterface ->
+            val alertDialog = dialogInterface as AlertDialog
+            
+            // Set title color
+            val titleId = resources.getIdentifier("alertTitle", "id", "android")
+            alertDialog.findViewById<TextView>(titleId)?.setTextColor(Color.WHITE)
+            
+            // Set list item colors
+            alertDialog.listView?.apply {
+                setSelector(R.drawable.dialog_item_selector)
+                divider = ColorDrawable(Color.WHITE)
+                dividerHeight = 1
+            }
+            
+            // Set button colors
+            alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.WHITE)
+        }
+        
+        dialog.show()
     }
 }

@@ -38,7 +38,7 @@
                 android:textColor="#757575"
                 android:textSize="14sp"
                 android:fontFamily="sans-serif"
-                android:maxLines="3"
+                android:maxLines="2"
                 android:ellipsize="end"
                 tools:text="beIN SPORTS 1"/>
 

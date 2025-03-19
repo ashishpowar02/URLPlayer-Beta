@@ -125,6 +125,22 @@
             app:icon="@drawable/pip_icon"
             app:iconGravity="top"
             app:iconTint="@color/white" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/languageBtn"
+            style="@style/Widget.AppCompat.Button.Borderless"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="@string/language"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            app:icon="@drawable/ic_language"
+            app:iconGravity="top"
+            app:iconTint="@color/white" />
     </LinearLayout>
 
 </LinearLayout>
