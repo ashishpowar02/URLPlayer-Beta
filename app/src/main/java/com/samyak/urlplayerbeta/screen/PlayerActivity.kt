@@ -1896,6 +1896,12 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             dialog.dismiss()
             showLanguageDialog()
         }
+
+        // In the showMoreFeaturesDialog method, add a new button handler for audio tracks
+        bindingMF.audioTrackBtn.setOnClickListener {
+            dialog.dismiss()
+            showAudioTracksDialog()
+        }
     }
 
     // Add this new method
@@ -1951,5 +1957,93 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         }
         
         dialog.show()
+    }
+
+    // Add this new method to handle audio track selection
+    private fun showAudioTracksDialog() {
+        val audioTracks = ArrayList<String>()
+        val audioTracksList = ArrayList<String>()
+        var hasAudioTracks = false
+
+        // Get available audio tracks
+        try {
+            for (group in player.currentTracksInfo.trackGroupInfos) {
+                if (group.trackType == C.TRACK_TYPE_AUDIO) {
+                    hasAudioTracks = true
+                    val groupInfo = group.trackGroup
+                    for (i in 0 until groupInfo.length) {
+                        val format = groupInfo.getFormat(i)
+                        val language = format.language ?: "unknown"
+                        val label = format.label ?: Locale(language).displayLanguage
+                        val channels = format.channelCount
+                        val bitrate = format.bitrate / 1000 // Convert to kbps
+                        
+                        audioTracks.add(language)
+                        audioTracksList.add(
+                            "${audioTracksList.size + 1}. $label" +
+                            if (language != "unknown") " (${Locale(language).displayLanguage})" else "" +
+                            if (channels > 0) " - ${channels}ch" else "" +
+                            if (bitrate > 0) " - ${bitrate}kbps" else ""
+                        )
+                    }
+                }
+            }
+
+            if (!hasAudioTracks) {
+                Toast.makeText(this, "No audio tracks available for this video", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val tempTracks = audioTracksList.toArray(arrayOfNulls<CharSequence>(audioTracksList.size))
+
+            MaterialAlertDialogBuilder(this, R.style.AlertDialogCustom)
+                .setTitle(getString(R.string.audio_track))
+                .setOnCancelListener { playVideo() }
+                .setItems(tempTracks) { dialog, position ->
+                    try {
+                        trackSelector.setParameters(
+                            trackSelector.buildUponParameters()
+                                .setPreferredAudioLanguage(audioTracks[position])
+                        )
+                        Snackbar.make(
+                            playerView,
+                            "Selected: ${audioTracksList[position]}",
+                            3000
+                        ).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Error selecting audio track", Toast.LENGTH_SHORT).show()
+                    }
+                    dialog.dismiss()
+                    playVideo()
+                }
+                .setNegativeButton(getString(R.string.cancel)) { dialog, _ ->
+                    dialog.dismiss()
+                    playVideo()
+                }
+                .setBackground(ColorDrawable(0x803700B3.toInt()))
+                .create()
+                .apply {
+                    setOnShowListener { dialogInterface ->
+                        val alertDialog = dialogInterface as AlertDialog
+                        
+                        // Set title color
+                        val titleId = resources.getIdentifier("alertTitle", "id", "android")
+                        alertDialog.findViewById<TextView>(titleId)?.setTextColor(Color.WHITE)
+                        
+                        // Set list item colors
+                        alertDialog.listView?.apply {
+                            setSelector(R.drawable.dialog_item_selector)
+                            divider = ColorDrawable(Color.WHITE)
+                            dividerHeight = 1
+                        }
+                        
+                        // Set button colors
+                        alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.WHITE)
+                    }
+                    show()
+                }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error loading audio tracks", Toast.LENGTH_SHORT).show()
+        }
     }
 }
