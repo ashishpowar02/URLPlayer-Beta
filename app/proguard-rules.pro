@@ -20,29 +20,17 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-# Keep generic signatures and annotations
--keepattributes Signature,*Annotation*,SourceFile,LineNumberTable
+# Keep generic signatures, annotations and debugging info
+-keepattributes Signature,*Annotation*,SourceFile,LineNumberTable,Exceptions,InnerClasses
 
-# Keep your models
+# Application-specific classes
+-keep class com.samyak.urlplayerbeta.** { *; }
 -keep class com.samyak.urlplayerbeta.models.** { *; }
-
-# Keep your activities
 -keep class com.samyak.urlplayerbeta.screen.** { *; }
--keepclassmembers class com.samyak.urlplayerbeta.screen.** {
-    public <init>(...);
-}
-
-# Keep adapters
 -keep class com.samyak.urlplayerbeta.adapters.** { *; }
--keepclassmembers class com.samyak.urlplayerbeta.adapters.** {
-    public <init>(...);
-}
-
-# Keep utils
 -keep class com.samyak.urlplayerbeta.utils.** { *; }
-
-# Keep ViewBinding classes
 -keep class com.samyak.urlplayerbeta.databinding.** { *; }
+-keep public class com.samyak.urlplayerbeta.MyApplication
 
 # ExoPlayer specific rules
 -dontwarn com.google.android.exoplayer2.**
@@ -54,10 +42,17 @@
 -keep class com.google.android.gms.cast.** { *; }
 -keep class com.google.android.gms.common.** { *; }
 -keep class com.google.android.gms.tasks.** { *; }
+-dontwarn com.google.android.gms.cast.**
+-keepclassmembers class com.google.android.gms.cast.framework.** { *; }
 
 # MediaRouter rules
 -keep class androidx.mediarouter.** { *; }
 -keep class android.support.v7.mediarouter.** { *; }
+
+# AdMob rules
+-keep class com.google.android.gms.ads.** { *; }
+-dontwarn com.google.android.gms.ads.**
+-keep public class com.google.android.gms.ads.MobileAds { public *; }
 
 # OkHttp rules
 -dontwarn okhttp3.**
@@ -66,23 +61,66 @@
 -keep interface okhttp3.** { *; }
 
 # Gson rules
--keepattributes Signature
--keepattributes *Annotation*
 -keep class sun.misc.Unsafe { *; }
 -keep class com.google.gson.** { *; }
 -keep class * implements com.google.gson.TypeAdapterFactory
 -keep class * implements com.google.gson.JsonSerializer
 -keep class * implements com.google.gson.JsonDeserializer
-
-# RecyclerView
--keep public class * extends androidx.recyclerview.widget.RecyclerView$LayoutManager {
-    public <init>(...);
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
 }
 
 # ViewBinding
 -keep class * implements androidx.viewbinding.ViewBinding {
     public static *** bind(android.view.View);
     public static *** inflate(...);
+}
+
+# Shimmer rules
+-keep class com.facebook.shimmer.** { *; }
+
+# Kotlin rules
+-keep class kotlin.** { *; }
+-keep class kotlin.Metadata { *; }
+-keep class kotlinx.coroutines.** { *; }
+-dontwarn kotlin.**
+-dontwarn kotlinx.**
+
+# AndroidX rules
+-keep class androidx.** { *; }
+-keep interface androidx.** { *; }
+-dontwarn androidx.**
+-dontwarn android.support.**
+
+# Material Design rules
+-keep class com.google.android.material.** { *; }
+-dontwarn com.google.android.material.**
+
+# RecyclerView
+-keep public class * extends androidx.recyclerview.widget.RecyclerView$LayoutManager {
+    public <init>(...);
+}
+
+# Standard Android components
+-keep public class * extends android.app.Activity
+-keep public class * extends android.app.Application
+-keep public class * extends android.app.Service
+-keep public class * extends android.content.BroadcastReceiver
+-keep public class * extends android.content.ContentProvider
+-keep public class * extends android.app.backup.BackupAgentHelper
+-keep public class * extends android.preference.Preference
+
+# Custom views
+-keep public class * extends android.view.View {
+    public <init>(android.content.Context);
+    public <init>(android.content.Context, android.util.AttributeSet);
+    public <init>(android.content.Context, android.util.AttributeSet, int);
+}
+
+# Keep onClick handlers
+-keepclassmembers class * extends android.content.Context {
+    public void *(android.view.View);
+    public void *(android.view.MenuItem);
 }
 
 # Enum
@@ -96,7 +134,26 @@
     public static final ** CREATOR;
 }
 
-# Remove logging
+# Serializable
+-keepclassmembers class * implements java.io.Serializable {
+    private static final java.io.ObjectStreamField[] serialPersistentFields;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
+}
+-keepnames class * implements java.io.Serializable
+
+# Native methods
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+# Media rules
+-keep class android.media.** { *; }
+-keep class android.media.audiofx.** { *; }
+
+# Remove logging in release
 -assumenosideeffects class android.util.Log {
     public static *** d(...);
     public static *** v(...);
@@ -111,151 +168,5 @@
 -allowaccessmodification
 -dontpreverify
 
-# Remove unused code
--dontwarn android.support.**
--dontwarn androidx.**
--dontwarn com.google.android.material.**
--dontwarn kotlin.**
-
-# Keep important data classes
--keepclassmembers class * {
-    @com.google.gson.annotations.SerializedName <fields>;
-}
-
-# Keep custom views if any
--keep public class * extends android.view.View {
-    public <init>(android.content.Context);
-    public <init>(android.content.Context, android.util.AttributeSet);
-    public <init>(android.content.Context, android.util.AttributeSet, int);
-}
-
-# General Android rules
--keepattributes Signature
--keepattributes *Annotation*
--keepattributes SourceFile,LineNumberTable
--keepattributes Exceptions,InnerClasses
-
-# Keep the application class and its methods
--keep class com.samyak.urlplayerbeta.** { *; }
-
-# ExoPlayer rules
--keep class com.google.android.exoplayer2.** { *; }
--dontwarn com.google.android.exoplayer2.**
--keepclassmembers class com.google.android.exoplayer2.** {
-    *;
-}
-
-# AdMob rules
--keep class com.google.android.gms.ads.** { *; }
--dontwarn com.google.android.gms.ads.**
--keep public class com.google.android.gms.ads.MobileAds {
-    public *;
-}
-
-# Cast SDK rules
--keep class com.google.android.gms.cast.** { *; }
--dontwarn com.google.android.gms.cast.**
--keepclassmembers class com.google.android.gms.cast.framework.** {
-    *;
-}
-
-# ViewBinding rules
--keep class * implements androidx.viewbinding.ViewBinding {
-    public static *** bind(android.view.View);
-    public static *** inflate(android.view.LayoutInflater);
-}
-
-# Model classes rules
--keep class com.samyak.urlplayerbeta.models.** { *; }
-
-# Kotlin rules
--keep class kotlin.** { *; }
--keep class kotlin.Metadata { *; }
--keep class kotlinx.coroutines.** { *; }
--dontwarn kotlin.**
--dontwarn kotlinx.**
-
-# AndroidX rules
--keep class androidx.** { *; }
--keep interface androidx.** { *; }
--dontwarn androidx.**
-
-# Material Design rules
--keep class com.google.android.material.** { *; }
--dontwarn com.google.android.material.**
-
-# Shimmer rules
--keep class com.facebook.shimmer.** { *; }
-
-# Media rules
--keep class android.media.** { *; }
--keep class android.media.audiofx.** { *; }
-
-# Network-related rules
--keepclassmembers class * implements java.io.Serializable {
-    private static final java.io.ObjectStreamField[] serialPersistentFields;
-    private void writeObject(java.io.ObjectOutputStream);
-    private void readObject(java.io.ObjectInputStream);
-    java.lang.Object writeReplace();
-    java.lang.Object readResolve();
-}
-
-# Remove logging in release
--assumenosideeffects class android.util.Log {
-    public static *** d(...);
-    public static *** v(...);
-    public static *** i(...);
-}
-
-# Optimization rules
--optimizations !code/simplification/arithmetic,!code/simplification/cast,!field/*,!class/merging/*
--optimizationpasses 5
--allowaccessmodification
-
-# Keep custom application class
--keep public class com.samyak.urlplayerbeta.MyApplication
-
-# Keep activities, services, etc.
--keep public class * extends android.app.Activity
--keep public class * extends android.app.Application
--keep public class * extends android.app.Service
--keep public class * extends android.content.BroadcastReceiver
--keep public class * extends android.content.ContentProvider
--keep public class * extends android.app.backup.BackupAgentHelper
--keep public class * extends android.preference.Preference
-
-# Keep native methods
--keepclasseswithmembernames class * {
-    native <methods>;
-}
-
-# Keep custom views
--keep public class * extends android.view.View {
-    public <init>(android.content.Context);
-    public <init>(android.content.Context, android.util.AttributeSet);
-    public <init>(android.content.Context, android.util.AttributeSet, int);
-}
-
-# Keep onClick handlers
--keepclassmembers class * extends android.content.Context {
-    public void *(android.view.View);
-    public void *(android.view.MenuItem);
-}
-
-# Keep Parcelable implementations
--keep class * implements android.os.Parcelable {
-    public static final android.os.Parcelable$Creator *;
-}
-
-# Keep Serializable implementations
--keepnames class * implements java.io.Serializable
-
 # Remove debugging info
 -renamesourcefileattribute SourceFile
--keepattributes SourceFile,LineNumberTable
-
-# Preserve the special static methods that are required in all enumeration classes
--keepclassmembers enum * {
-    public static **[] values();
-    public static ** valueOf(java.lang.String);
-}

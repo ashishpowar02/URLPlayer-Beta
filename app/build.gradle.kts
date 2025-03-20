@@ -29,6 +29,17 @@ android {
             )
         }
     }
+
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                val outputFileName = "UrlPlayerBeta-${variant.versionName}-${variant.baseName}.apk"
+                output.outputFileName = outputFileName
+            }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -36,7 +47,7 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-
+    
     buildFeatures {
         viewBinding = true
     }
@@ -82,8 +93,8 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation(libs.firebase.database.ktx)
 
-    implementation ("com.github.bumptech.glide:glide:4.12.0")
-    annotationProcessor ("com.github.bumptech.glide:compiler:4.12.0")
+    implementation("com.github.bumptech.glide:glide:4.12.0")
+    annotationProcessor("com.github.bumptech.glide:compiler:4.12.0")
 
 
     // Gauge Library
