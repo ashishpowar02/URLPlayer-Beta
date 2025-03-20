@@ -12,6 +12,7 @@ import androidx.appcompat.widget.SearchView
 import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.tabs.TabLayout
 import com.samyak.urlplayerbeta.R
 import com.samyak.urlplayerbeta.adapters.PlaylistItemAdapter
 import com.samyak.urlplayerbeta.databinding.ActivityPlaylistBinding
@@ -26,6 +27,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.URL
 import java.util.Locale
+import java.util.LinkedHashSet
 
 class PlaylistActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPlaylistBinding
@@ -35,6 +37,7 @@ class PlaylistActivity : AppCompatActivity() {
     private var playlistName: String? = null
     private var userAgent: String? = null
     private var allPlaylistItems = listOf<PlaylistItem>()
+    private var currentGroup: String? = null
 
     companion object {
         private const val GRID_SPAN_COUNT = 3
@@ -72,7 +75,6 @@ class PlaylistActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
-
         val spanCount = GRID_SPAN_COUNT
         // Get spacing dimension
         val spacing = resources.getDimensionPixelSize(R.dimen.grid_spacing)
@@ -105,7 +107,8 @@ class PlaylistActivity : AppCompatActivity() {
                         binding.emptyStateView.visibility = View.VISIBLE
                     } else {
                         allPlaylistItems = playlistItems
-                        adapter.updateItems(playlistItems)
+                        setupGroupTabs(playlistItems)
+                        updatePlaylistForCurrentGroup()
                         binding.playlistRecyclerView.visibility = View.VISIBLE
                     }
                 }
@@ -120,6 +123,73 @@ class PlaylistActivity : AppCompatActivity() {
                     ).show()
                 }
             }
+        }
+    }
+
+    private fun setupGroupTabs(items: List<PlaylistItem>) {
+        // Extract unique groups while preserving order
+        val groups = LinkedHashSet<String>()
+        
+        // Add "ALL" as the first tab
+        groups.add("ALL")
+        
+        // Add all other groups
+        items.forEach { item ->
+            item.group?.let { 
+                if (it.isNotEmpty()) {
+                    groups.add(it)
+                }
+            }
+        }
+        
+        // Clear existing tabs
+        binding.groupTabLayout.removeAllTabs()
+        
+        // Add a tab for each group
+        groups.forEach { group ->
+            val tab = binding.groupTabLayout.newTab()
+            tab.text = if (group == "ALL") "ALL(${items.size})" else "$group(${countItemsInGroup(items, group)})"
+            binding.groupTabLayout.addTab(tab)
+        }
+        
+        // Set tab selection listener
+        binding.groupTabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                val selectedGroup = tab.text.toString().split("(")[0]
+                currentGroup = if (selectedGroup == "ALL") null else selectedGroup
+                updatePlaylistForCurrentGroup()
+            }
+            
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
+    }
+    
+    private fun countItemsInGroup(items: List<PlaylistItem>, group: String): Int {
+        return if (group == "ALL") {
+            items.size
+        } else {
+            items.count { it.group == group }
+        }
+    }
+    
+    private fun updatePlaylistForCurrentGroup() {
+        val filteredItems = if (currentGroup == null) {
+            allPlaylistItems
+        } else {
+            allPlaylistItems.filter { it.group == currentGroup && it.isActive }
+        }
+        
+        adapter.updateItems(filteredItems)
+        
+        // Show empty state if no items in the selected group
+        if (filteredItems.isEmpty()) {
+            binding.emptyStateView.visibility = View.VISIBLE
+            binding.playlistRecyclerView.visibility = View.GONE
+        } else {
+            binding.emptyStateView.visibility = View.GONE
+            binding.playlistRecyclerView.visibility = View.VISIBLE
         }
     }
 
