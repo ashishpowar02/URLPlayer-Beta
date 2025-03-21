@@ -181,6 +181,13 @@ copylefted libre software app, gratis
 - Lottie - For animations
 - ViewBinding - For view binding
 
+## Contributors
+
+Please Feel free to contribute by submitting a Pull Request!
+
+[![](https://contrib.rocks/image?repo=samyak2403/URLPlayer-Beta)](https://github.com/samyak2403/URLPlayer-Beta/graphs/contributors)
+
+
 ## Contributing
 
 1. Fork the repository
@@ -188,7 +195,7 @@ copylefted libre software app, gratis
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
-
+   
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
