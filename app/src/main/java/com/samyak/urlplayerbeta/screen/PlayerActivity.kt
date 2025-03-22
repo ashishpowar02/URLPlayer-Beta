@@ -1,5 +1,10 @@
 package com.samyak.urlplayerbeta.screen
 
+import android.animation.Animator
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
+import android.animation.AnimatorListenerAdapter
 import android.annotation.SuppressLint
 import android.app.AppOpsManager
 import android.app.PictureInPictureParams
@@ -15,6 +20,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -40,6 +46,8 @@ import com.google.android.material.snackbar.Snackbar
 import java.util.Locale
 import android.media.AudioManager
 import android.content.res.Resources
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.view.GestureDetector
 import androidx.core.view.GestureDetectorCompat
 import com.github.vkay94.dtpv.youtube.YouTubeOverlay
@@ -71,6 +79,11 @@ import android.util.Rational
 import android.widget.AbsListView
 import com.samyak.urlplayerbeta.base.BaseActivity
 import com.samyak.urlplayerbeta.utils.LanguageManager
+import com.google.android.exoplayer2.ui.TimeBar
+import android.widget.Button
+import com.google.android.exoplayer2.PlaybackParameters
+import com.google.android.exoplayer2.Timeline
+
 
 class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     private lateinit var binding: ActivityPlayerBinding
@@ -206,6 +219,25 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
     // Add this property to track if we're showing an ad
     private var isShowingAd = false
+
+    // Add these properties back at the top of the class with other properties
+    private var liveStreamTimeShiftEnabled = true
+    private var liveStreamStartTime = 0L
+    private var liveStreamDuration = 30 * 60 * 1000L // 30 minutes buffer by default
+
+    // Add this property at the top of your class
+    private var goLiveButtonId = View.NO_ID
+
+    // Add these properties at the top of your class
+    private var behindLiveThreshold = 10000L // 10 seconds threshold to show GO LIVE button
+    private var lastLivePosition = 0L
+    private var isAtLiveEdge = true
+
+    // Add these properties to your class
+    private var lastKnownLiveDuration: Long = 0
+    private var lastLiveUpdateTime: Long = System.currentTimeMillis()
+    private var lastPositionUpdateTime: Long = System.currentTimeMillis()
+    private var isLiveTextAnimating: Boolean = false
 
     private val castSessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {}
@@ -436,7 +468,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             // This assumes you have a pipButton in your player control layout
             val pipButton = playerView.findViewById<ImageButton>(R.id.pipModeBtn)
             pipButton?.setOnClickListener {
-                enterPipMode()
+                enterPictureInPictureMode()
             }
 
         } catch (e: Exception) {
@@ -481,15 +513,15 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         repeatButton.setOnClickListener {
             when (player.repeatMode) {
                 Player.REPEAT_MODE_OFF -> {
-                    player.repeatMode = Player.REPEAT_MODE_ONE
+                    player.setRepeatMode(Player.REPEAT_MODE_ONE)
                     repeatButton.setImageResource(R.drawable.repeat_one_icon)
                 }
                 Player.REPEAT_MODE_ONE -> {
-                    player.repeatMode = Player.REPEAT_MODE_ALL
+                    player.setRepeatMode(Player.REPEAT_MODE_ALL)
                     repeatButton.setImageResource(R.drawable.repeat_all_icon)
                 }
                 else -> {
-                    player.repeatMode = Player.REPEAT_MODE_OFF
+                    player.setRepeatMode(Player.REPEAT_MODE_OFF)
                     repeatButton.setImageResource(R.drawable.repeat_off_icon)
                 }
             }
@@ -520,6 +552,11 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 if (isLocked) R.drawable.close_lock_icon
                 else R.drawable.lock_open_icon
             )
+        }
+        
+        // Add PiP button handler if it exists in the layout
+        playerView.findViewById<ImageButton>(R.id.pipModeBtn)?.setOnClickListener {
+            enterPictureInPictureMode()
         }
     }
 
@@ -895,6 +932,16 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 
                 // Set up progress updater for live streams
                 setupLiveProgressUpdater()
+                
+                // Configure time bar for live streams
+                configureLiveTimeBar()
+                
+                // Apply custom styling for live streams
+                customizeLiveStreamPlayer()
+                
+                // Add these new calls
+                handleLiveStreamSeeking()
+                addGoLiveButton()
             }
 
             // Add player listener
@@ -1091,6 +1138,14 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         if (::sessionManager.isInitialized) {
             sessionManager.addSessionManagerListener(castSessionManagerListener, CastSession::class.java)
         }
+        
+        // If you're restoring repeat mode, use setRepeatMode
+        val savedRepeatMode = getSharedPreferences("player_settings", Context.MODE_PRIVATE)
+            .getInt("repeat_mode", Player.REPEAT_MODE_OFF)
+        player.setRepeatMode(savedRepeatMode)
+        
+        // Update repeat button icon based on current mode
+        updateRepeatButtonIcon(player.repeatMode)
     }
 
     override fun onPause() {
@@ -1688,101 +1743,443 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         }
     }
 
-    // Add this method to update progress for live streams
-    private fun setupLiveProgressUpdater() {
-        val handler = android.os.Handler(android.os.Looper.getMainLooper())
-        val updateInterval = 1000L // Update every second
-        
-        val runnable = object : Runnable {
-            override fun run() {
-                if (isLiveStream && isPlayerReady && !isInPictureInPictureMode) {
-                    // Force the player view to update its UI
-                    playerView.invalidate()
-                    
-                    // Update player state
-                    if (player.isPlaying) {
-                        // Ensure we're showing the correct buffering state
-                        val bufferedPosition = player.bufferedPosition
-                        val duration = player.duration
-                        
-                        if (duration > 0) {
-                            // We have a valid duration, update any custom UI if needed
-                            val bufferedPercentage = (bufferedPosition * 100 / duration).toInt()
-                            // You could update a custom progress bar here if needed
+    // Fix the configureLiveTimeBar method
+    private fun configureLiveTimeBar() {
+        try {
+            // Get the time bar from player view - use fully qualified ID
+            val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
+                com.google.android.exoplayer2.ui.R.id.exo_progress
+            )
+            
+            // Set scrubbing enabled for live streams with DVR support
+            timeBar?.isEnabled = true
+            
+            // Set the live playback parameters
+            player.setPlaybackParameters(PlaybackParameters(1.0f))
+            
+            // Initialize the live stream start time
+            liveStreamStartTime = System.currentTimeMillis() - 30000 // Start 30 seconds in the past
+            
+            // Set initial duration for the progress bar (30 minutes buffer)
+            liveStreamDuration = 30 * 60 * 1000
+            
+            // Add a listener to track when we're at the live edge
+            player.addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    if (isPlaying && isLiveStream) {
+                        try {
+                            // When playing resumes, check if we're at live edge
+                            val isAtLiveEdge = player.contentPosition >= player.currentTimeline.getWindow(
+                                player.currentMediaItemIndex, Timeline.Window()
+                            ).durationMs - 5000 // Within 5 seconds of live edge
+                            
+                            if (isAtLiveEdge) {
+                                // Update UI to show we're at live edge
+                                playerView.findViewById<TextView>(R.id.exo_live_text)?.apply {
+                                    visibility = View.VISIBLE
+                                    setTextColor(Color.RED)
+                                    text = "LIVE"
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("PlayerActivity", "Error in live edge check: ${e.message}")
                         }
                     }
                 }
-                
-                // Schedule next update
-                if (isPlayerReady && !isDestroyed) {
-                    handler.postDelayed(this, updateInterval)
-                }
-            }
+            })
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error configuring live time bar: ${e.message}")
         }
-        
-        // Start the updater
-        handler.post(runnable)
     }
 
-    // Add this method to handle PiP mode entry
-    private fun enterPipMode() {
-        val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            appOps.checkOpNoThrow(
-                AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
-                android.os.Process.myUid(),
-                packageName
-            ) == AppOpsManager.MODE_ALLOWED
-        } else {
-            false
-        }
+    // Disney+ Hotstar style GO LIVE button implementation without delays
+    private fun addGoLiveButton() {
+        if (isLiveStream) {
+            try {
+                // Generate ID if not already generated
+                if (goLiveButtonId == View.NO_ID) {
+                    goLiveButtonId = View.generateViewId()
+                }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (status) {
-                // Save current state before entering PiP
-                prePipScreenMode = currentScreenMode
-                prePipNotchEnabled = isNotchModeEnabled
-                
-                // Hide controls immediately before entering PiP
-                binding.playerView.hideController()
-                binding.lockButton.visibility = View.GONE
-                binding.brightnessIcon.visibility = View.GONE
-                binding.volumeIcon.visibility = View.GONE
-                
-                // Enter PiP mode
-                try {
-                    // Create PiP params with aspect ratio based on video dimensions
-                    val videoRatio = if (player.videoFormat != null) {
-                        Rational(player.videoFormat!!.width, player.videoFormat!!.height)
-                    } else {
-                        Rational(16, 9) // Default aspect ratio
+                // Find or create a "Go Live" button in your layout
+                var goLiveButton = playerView.findViewById<Button>(goLiveButtonId)
+
+                // If button doesn't exist in layout, create it dynamically
+                if (goLiveButton == null) {
+                    goLiveButton = Button(this).apply {
+                        id = goLiveButtonId
+                        text = "GO LIVE"
+
+                        // Disney+ Hotstar style - white text on red background
+                        setTextColor(Color.WHITE)
+                        setTypeface(typeface, Typeface.BOLD)
+
+                        // Create a background with rounded corners and red background (Hotstar style)
+                        val backgroundDrawable = GradientDrawable().apply {
+                            shape = GradientDrawable.RECTANGLE
+                            cornerRadius = 25f // More rounded corners like Hotstar
+                            setColor(Color.RED) // Solid red background like Hotstar
+                        }
+                        background = backgroundDrawable
+
+                        // Style the button
+                        setPadding(40, 12, 40, 12) // Wider padding for better appearance
+                        textSize = 14f
+                        elevation = 6f // Increased elevation for better shadow effect
+                        
+                        // Add a subtle stroke for better visibility
+                        (background as GradientDrawable).setStroke(2, Color.parseColor("#FFCCCCCC"))
+
+                        // Position the button in the layout - Disney+ Hotstar places it at the bottom center
+                        val params = FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                            FrameLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                            bottomMargin = 140 // Position above the progress bar
+                        }
+
+                        layoutParams = params
+                        visibility = View.GONE
+
+                        // Add the button to the player view
+                        (playerView as FrameLayout).addView(this)
+                        
+                        // Set up click listener for immediate response
+                        setOnClickListener {
+                            // Hotstar-style animation
+                            val scaleDown = ObjectAnimator.ofFloat(it, "scaleX", 1f, 0.85f)
+                            val scaleDownY = ObjectAnimator.ofFloat(it, "scaleY", 1f, 0.85f)
+                            val scaleUp = ObjectAnimator.ofFloat(it, "scaleX", 0.85f, 1.05f)
+                            val scaleUpY = ObjectAnimator.ofFloat(it, "scaleY", 0.85f, 1.05f)
+                            val scaleNormal = ObjectAnimator.ofFloat(it, "scaleX", 1.05f, 1f)
+                            val scaleNormalY = ObjectAnimator.ofFloat(it, "scaleY", 1.05f, 1f)
+                            val fadeOut = ObjectAnimator.ofFloat(it, "alpha", 1f, 0f)
+                            
+                            val animSet = AnimatorSet()
+                            
+                            // First do the press effect
+                            val pressEffect = AnimatorSet()
+                            pressEffect.playTogether(scaleDown, scaleDownY)
+                            
+                            // Then do the release effect
+                            val releaseEffect = AnimatorSet()
+                            releaseEffect.playTogether(scaleUp, scaleUpY)
+                            
+                            // Then normalize
+                            val normalizeEffect = AnimatorSet()
+                            normalizeEffect.playTogether(scaleNormal, scaleNormalY)
+                            
+                            // Chain them together
+                            animSet.playSequentially(pressEffect, releaseEffect, normalizeEffect, fadeOut)
+                            animSet.duration = 300 // Faster animation for immediate feedback
+                            animSet.start()
+
+                            // Show a red flash effect across the screen (like Hotstar does)
+                            val flashView = View(context).apply {
+                                setBackgroundColor(Color.parseColor("#33FF0000")) // Semi-transparent red
+                                layoutParams = FrameLayout.LayoutParams(
+                                    FrameLayout.LayoutParams.MATCH_PARENT,
+                                    FrameLayout.LayoutParams.MATCH_PARENT
+                                )
+                                alpha = 0f
+                            }
+                            (playerView as FrameLayout).addView(flashView)
+                            
+                            // Animate the flash
+                            val flashIn = ObjectAnimator.ofFloat(flashView, "alpha", 0f, 0.3f)
+                            val flashOut = ObjectAnimator.ofFloat(flashView, "alpha", 0.3f, 0f)
+                            val flashAnim = AnimatorSet()
+                            flashAnim.playSequentially(flashIn, flashOut)
+                            flashAnim.duration = 300 // Faster animation
+                            flashAnim.addListener(object : AnimatorListenerAdapter() {
+                                override fun onAnimationEnd(animation: Animator) {
+                                    (playerView as FrameLayout).removeView(flashView)
+                                }
+                            })
+                            flashAnim.start()
+
+                            // Get the latest timeline window
+                            val currentWindow = player.currentTimeline.getWindow(
+                                player.currentMediaItemIndex, Timeline.Window()
+                            )
+
+                            // Hotstar optimization: Temporarily increase playback speed to catch up
+                            val originalSpeed = player.playbackParameters.speed
+                            player.setPlaybackParameters(PlaybackParameters(1.5f))
+                            
+                            // Seek to the live edge immediately
+                            player.seekTo(currentWindow.durationMs)
+                            player.play()
+
+                            // Reset playback speed after a short delay
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                player.setPlaybackParameters(PlaybackParameters(originalSpeed))
+                            }, 800) // Shorter delay for immediate response
+
+                            // Update state immediately
+                            isAtLiveEdge = true
+                            lastLivePosition = currentWindow.durationMs
+
+                            // Update UI immediately
+                            updateLiveEdgeIndicator(true)
+
+                            // Show feedback - Disney+ Hotstar style toast
+                            showCustomToast("You're now watching live")
+
+                            // Hide button immediately
+                            visibility = View.GONE
+                        }
                     }
+                }
 
-                    val params = PictureInPictureParams.Builder()
-                        .setAspectRatio(videoRatio)
-                        .build()
+                // Start pulse animation for the button
+                startHotstarPulseAnimation(goLiveButton)
+                
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Error adding Go Live button: ${e.message}")
+            }
+        }
+    }
 
-                    enterPictureInPictureMode(params)
+    // Improved check for live position with Hotstar-like behavior - more responsive
+    private fun checkLivePosition() {
+        try {
+            // Get the current window from timeline
+            val currentWindow = player.currentTimeline.getWindow(
+                player.currentMediaItemIndex, Timeline.Window()
+            )
+            
+            // Get duration (live edge position)
+            val duration = currentWindow.durationMs
+            if (duration <= 0) return
+            
+            // Get current position
+            val currentPosition = player.contentPosition
+            
+            // Calculate how far behind live we are
+            val timeBehindLive = duration - currentPosition
+            
+            // Update the last known live position
+            lastLivePosition = duration
+            
+            // Check if we're at live edge (within threshold)
+            val wasAtLiveEdge = isAtLiveEdge
+            isAtLiveEdge = timeBehindLive < behindLiveThreshold
+            
+            // Find the GO LIVE button
+            val goLiveButton = playerView.findViewById<Button>(goLiveButtonId) ?: return
+            
+            // Update the live indicator text
+            val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
+            liveText?.apply {
+                visibility = View.VISIBLE
+                
+                // Update text based on how far behind we are
+                if (isAtLiveEdge) {
+                    text = "LIVE"
+                    setTextColor(Color.RED)
+                    // Add a small red dot before the text (Hotstar style)
+                    val dotDrawable = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(Color.RED)
+                        setSize(12, 12)
+                    }
+                    setCompoundDrawablesWithIntrinsicBounds(dotDrawable, null, null, null)
+                    compoundDrawablePadding = 8
+                } else {
+                    // Format time behind live (Hotstar style)
+                    if (timeBehindLive >= 60000) {
+                        // More than a minute behind
+                        val minutes = timeBehindLive / 60000
+                        text = "-${minutes}m"
+                    } else {
+                        // Less than a minute behind
+                        val seconds = timeBehindLive / 1000
+                        text = "-${seconds}s"
+                    }
+                    setTextColor(Color.WHITE)
+                    // Remove the dot when not live
+                    setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
+                }
+            }
+            
+            // Handle GO LIVE button visibility with immediate response
+            if (!isAtLiveEdge && timeBehindLive > behindLiveThreshold) {
+                // We're behind live, show the button immediately if it was hidden
+                if (goLiveButton.visibility != View.VISIBLE) {
+                    goLiveButton.alpha = 0f
+                    goLiveButton.visibility = View.VISIBLE
                     
-                    // Set flag to prevent ads when PiP is requested
-                    isPipRequested = true
+                    // Fade in animation - quick and responsive
+                    val fadeIn = ObjectAnimator.ofFloat(goLiveButton, "alpha", 0f, 1f)
+                    fadeIn.duration = 200
+                    fadeIn.start()
                     
-                    // Ensure video is playing
-                    playVideo()
-                } catch (e: Exception) {
-                    Log.e("PlayerActivity", "Failed to enter PiP mode: ${e.message}")
-                    Toast.makeText(this, "Failed to enter PiP mode", Toast.LENGTH_SHORT).show()
+                    // Also add a slight bounce effect (Hotstar style)
+                    val scaleX = ObjectAnimator.ofFloat(goLiveButton, "scaleX", 0.9f, 1.05f, 1f)
+                    val scaleY = ObjectAnimator.ofFloat(goLiveButton, "scaleY", 0.9f, 1.05f, 1f)
+                    
+                    val bounceSet = AnimatorSet()
+                    bounceSet.playTogether(scaleX, scaleY)
+                    bounceSet.duration = 300
+                    bounceSet.start()
                 }
             } else {
-                // Open PiP settings if not enabled
-                val intent = Intent(
-                    "android.settings.PICTURE_IN_PICTURE_SETTINGS",
-                    Uri.parse("package:$packageName")
-                )
-                startActivity(intent)
+                // We're at live edge, hide the button immediately if it was visible
+                if (goLiveButton.visibility == View.VISIBLE) {
+                    // Fade out animation - quick and responsive
+                    val fadeOut = ObjectAnimator.ofFloat(goLiveButton, "alpha", 1f, 0f)
+                    fadeOut.duration = 200
+                    fadeOut.addListener(object : AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: android.animation.Animator) {
+                            goLiveButton.visibility = View.GONE
+                        }
+                    })
+                    fadeOut.start()
+                }
             }
-        } else {
-            Toast.makeText(this, "Feature Not Supported!!", Toast.LENGTH_SHORT).show()
+            
+            // If we just reached live edge, show a toast (Hotstar does this)
+            if (!wasAtLiveEdge && isAtLiveEdge) {
+                showCustomToast("You're now watching live")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error checking live position: ${e.message}")
+        }
+    }
+
+    // Improved Hotstar-style pulse animation for GO LIVE button
+    private fun startHotstarPulseAnimation(view: View) {
+        try {
+            // Create a pulsing dot next to the GO LIVE text (Hotstar style)
+            val dotSize = 12
+            val dotView = View(this).apply {
+                val dotDrawable = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.WHITE)
+                    setSize(dotSize, dotSize)
+                }
+                background = dotDrawable
+                
+                // Position the dot at the left of the button text
+                val params = FrameLayout.LayoutParams(dotSize, dotSize).apply {
+                    gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                    leftMargin = 16
+                }
+                layoutParams = params
+                
+                // Add the dot to the button if it's a ViewGroup
+                if (view is ViewGroup) {
+                    view.addView(this)
+                }
+            }
+            
+            // Create subtle pulse animation for the button
+            val scaleX = ValueAnimator.ofFloat(1f, 1.05f, 1f)
+            val scaleY = ValueAnimator.ofFloat(1f, 1.05f, 1f)
+            
+            // Update the view's scale as the animation runs
+            scaleX.addUpdateListener { animator ->
+                view.scaleX = animator.animatedValue as Float
+            }
+            
+            scaleY.addUpdateListener { animator ->
+                view.scaleY = animator.animatedValue as Float
+            }
+            
+            // Create animator set for the button
+            val animatorSet = AnimatorSet()
+            animatorSet.playTogether(scaleX, scaleY)
+            animatorSet.duration = 2000 // 2 seconds per pulse
+//            animatorSet.repeatCount = ValueAnimator.INFINITE
+//            animatorSet.repeatMode = ValueAnimator.RESTART
+            
+            // Create pulse animation for the dot
+            val dotScaleX = ObjectAnimator.ofFloat(dotView, "scaleX", 1f, 1.5f, 1f)
+            val dotScaleY = ObjectAnimator.ofFloat(dotView, "scaleY", 1f, 1.5f, 1f)
+            val dotAlpha = ObjectAnimator.ofFloat(dotView, "alpha", 1f, 0.6f, 1f)
+            
+            val dotAnimSet = AnimatorSet()
+            dotAnimSet.playTogether(dotScaleX, dotScaleY, dotAlpha)
+            dotAnimSet.duration = 1200
+//            dotAnimSet.repeatCount = ValueAnimator.INFINITE
+//            dotAnimSet.repeatMode = ValueAnimator.RESTART
+            
+            // Start animations when view becomes visible
+            view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) {
+                    if (v.visibility == View.VISIBLE) {
+                        animatorSet.start()
+                        dotAnimSet.start()
+                    }
+                }
+                
+                override fun onViewDetachedFromWindow(v: View) {
+                    animatorSet.cancel()
+                    dotAnimSet.cancel()
+                }
+            })
+            
+            // Also start animations if view is already visible
+            if (view.visibility == View.VISIBLE && view.isAttachedToWindow) {
+                animatorSet.start()
+                dotAnimSet.start()
+            }
+            
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error starting pulse animation: ${e.message}")
+        }
+    }
+
+    // Replace the showCustomToast method with this improved version
+    private fun showCustomToast(message: String) {
+        try {
+            // Create a custom toast layout that looks like Disney+ Hotstar
+            val layout = LayoutInflater.from(this).inflate(R.layout.custom_toast, null)
+            val textView = layout.findViewById<TextView>(R.id.toast_text)
+            textView.text = message
+            
+            // Style the toast to match Hotstar (white text on semi-transparent black background)
+            val background = layout.background as GradientDrawable
+            background.setColor(Color.parseColor("#CC000000")) // Semi-transparent black
+            background.cornerRadius = 25f // Rounded corners
+            
+            textView.setTextColor(Color.WHITE)
+            textView.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                // For older Android versions
+                val toast = Toast(applicationContext)
+                toast.duration = Toast.LENGTH_SHORT
+                toast.view = layout
+                toast.setGravity(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 0, 150)
+                toast.show()
+            } else {
+                // For Android 11+ where custom toast views are deprecated
+                // Use Snackbar instead which can be styled to look like Hotstar toast
+                val snackbar = Snackbar.make(binding.root, message, Snackbar.LENGTH_SHORT)
+                val snackbarView = snackbar.view
+                
+                // Style the Snackbar to look like Hotstar toast
+                snackbarView.setBackgroundColor(Color.parseColor("#CC000000"))
+                val params = snackbarView.layoutParams as FrameLayout.LayoutParams
+                params.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                params.bottomMargin = 150
+                snackbarView.layoutParams = params
+                
+                // Find the text view in the Snackbar and style it
+                val textView = snackbarView.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
+                textView.setTextColor(Color.WHITE)
+                textView.textAlignment = View.TEXT_ALIGNMENT_CENTER
+                textView.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                
+                snackbar.show()
+            }
+        } catch (e: Exception) {
+            // Fallback to standard toast
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1888,7 +2285,8 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
         // Add PiP button click handler
         bindingMF.pipModeBtn.setOnClickListener {
-            enterPipMode()
+            dialog.dismiss()
+            enterPictureInPictureMode()
         }
 
         // Add language button click handler
@@ -2044,6 +2442,618 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 }
         } catch (e: Exception) {
             Toast.makeText(this, "Error loading audio tracks", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Add this method to handle seeking in live streams
+    private fun handleLiveStreamSeeking() {
+        // Find the time bar - use the fully qualified ID
+        val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
+            com.google.android.exoplayer2.ui.R.id.exo_progress
+        )
+        
+        // Add a listener to detect when user seeks in a live stream
+        timeBar?.addListener(object : TimeBar.OnScrubListener {
+            override fun onScrubStart(timeBar: TimeBar, position: Long) {
+                // Pause playback during scrubbing
+                wasPlayingBeforePause = player.isPlaying
+                player.pause()
+            }
+
+            override fun onScrubMove(timeBar: TimeBar, position: Long) {
+                // Update a "time behind live" indicator if you have one
+                val currentWindow = player.currentTimeline.getWindow(
+                    player.currentMediaItemIndex, Timeline.Window()
+                )
+                val duration = currentWindow.durationMs
+                
+                if (duration > 0) {
+                    val timeBehindLive = duration - position
+                    // Update UI to show how far behind live we are
+                    updateTimeBehindLiveIndicator(timeBehindLive)
+                }
+            }
+
+            override fun onScrubStop(timeBar: TimeBar, position: Long, canceled: Boolean) {
+                // Resume playback if it was playing before
+                if (wasPlayingBeforePause && !canceled) {
+                    player.play()
+                }
+                
+                // Check if we're at live edge
+                val currentWindow = player.currentTimeline.getWindow(
+                    player.currentMediaItemIndex, Timeline.Window()
+                )
+                val duration = currentWindow.durationMs
+                
+                if (duration > 0) {
+                    val isAtLiveEdge = position >= duration - 5000
+                    updateLiveEdgeIndicator(isAtLiveEdge)
+                }
+            }
+        })
+    }
+    
+    // Helper method to update time behind live indicator
+    private fun updateTimeBehindLiveIndicator(timeBehindLive: Long) {
+        // Find your time behind live indicator view
+        val timeBehindLiveText = playerView.findViewById<TextView>(R.id.exo_live_text)
+        
+        if (timeBehindLiveText != null) {
+            if (timeBehindLive > 5000) {
+                // More than 5 seconds behind live
+                val seconds = timeBehindLive / 1000
+                val minutes = seconds / 60
+                
+                if (minutes > 0) {
+                    timeBehindLiveText.text = "-${minutes}m ${seconds % 60}s"
+                } else {
+                    timeBehindLiveText.text = "-${seconds}s"
+                }
+                timeBehindLiveText.setTextColor(Color.WHITE)
+            } else {
+                // At live edge
+                timeBehindLiveText.text = "LIVE"
+                timeBehindLiveText.setTextColor(Color.RED)
+            }
+        }
+    }
+    
+    // Helper method to update live edge indicator
+    private fun updateLiveEdgeIndicator(isAtLiveEdge: Boolean) {
+        val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
+        
+        liveText?.apply {
+            visibility = View.VISIBLE
+            text = if (isAtLiveEdge) "LIVE" else "LIVE"
+            setTextColor(if (isAtLiveEdge) Color.RED else Color.WHITE)
+        }
+    }
+    
+
+    // Helper method to update GO LIVE button visibility
+    private fun updateGoLiveButtonVisibility(goLiveButton: Button) {
+        try {
+            val currentWindow = player.currentTimeline.getWindow(
+                player.currentMediaItemIndex, Timeline.Window()
+            )
+            val duration = currentWindow.durationMs
+            val currentPosition = player.contentPosition
+            val isAtLiveEdge = currentPosition >= duration - 5000
+            
+            // Only show the button when not at live edge
+            goLiveButton.visibility = if (isAtLiveEdge) View.GONE else View.VISIBLE
+            
+            // Update the live indicator text
+            val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
+            liveText?.apply {
+                visibility = View.VISIBLE
+                text = if (isAtLiveEdge) "LIVE" else "LIVE"
+                setTextColor(if (isAtLiveEdge) Color.RED else Color.WHITE)
+            }
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error updating GO LIVE button: ${e.message}")
+        }
+    }
+
+    // Replace the existing startPulseAnimation method with this simplified version
+    private fun startPulseAnimation(view: View) {
+        try {
+            val scaleX = ObjectAnimator.ofFloat(view, "scaleX", 1f, 1.1f, 1f)
+            val scaleY = ObjectAnimator.ofFloat(view, "scaleY", 1f, 1.1f, 1f)
+            
+            val animatorSet = AnimatorSet()
+            animatorSet.playTogether(scaleX, scaleY)
+            animatorSet.duration = 1500
+            
+            // Use a listener to repeat the animation
+            animatorSet.addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (view.isAttachedToWindow && view.visibility == View.VISIBLE) {
+                        animatorSet.start()
+                    }
+                }
+            })
+            
+            animatorSet.start()
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error in pulse animation: ${e.message}")
+        }
+    }
+
+    // Replace enterPipMode() with this method that uses the standard Android API
+    override fun enterPictureInPictureMode() {
+        val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                android.os.Process.myUid(),
+                packageName
+            ) == AppOpsManager.MODE_ALLOWED
+        } else {
+            false
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (status) {
+                // Save current state before entering PiP
+                prePipScreenMode = currentScreenMode
+                prePipNotchEnabled = isNotchModeEnabled
+                
+                // Hide controls immediately before entering PiP
+                binding.playerView.hideController()
+                binding.lockButton.visibility = View.GONE
+                binding.brightnessIcon.visibility = View.GONE
+                binding.volumeIcon.visibility = View.GONE
+                
+                // Enter PiP mode
+                try {
+                    // Create PiP params with aspect ratio based on video dimensions
+                    val videoRatio = if (player.videoFormat != null) {
+                        Rational(player.videoFormat!!.width, player.videoFormat!!.height)
+                    } else {
+                        Rational(16, 9) // Default aspect ratio
+                    }
+
+                    val params = PictureInPictureParams.Builder()
+                        .setAspectRatio(videoRatio)
+                        .build()
+
+                    super.enterPictureInPictureMode(params)
+                    
+                    // Set flag to prevent ads when PiP is requested
+                    isPipRequested = true
+                    
+                    // Ensure video is playing
+                    playVideo()
+                } catch (e: Exception) {
+                    Log.e("PlayerActivity", "Failed to enter PiP mode: ${e.message}")
+                    Toast.makeText(this, "Failed to enter PiP mode", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                // Open PiP settings if not enabled
+                val intent = Intent(
+                    "android.settings.PICTURE_IN_PICTURE_SETTINGS",
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+            }
+        } else {
+            Toast.makeText(this, "Feature Not Supported!!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Enhanced Disney+ Hotstar cricket live streaming implementation
+    private fun setupLiveProgressUpdater() {
+        if (!isLiveStream) return
+        
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val updateInterval = 50L // Update 20 times per second for ultra-smooth updates
+        
+        val runnable = object : Runnable {
+            override fun run() {
+                if (isLiveStream && isPlayerReady && !isInPictureInPictureMode) {
+                    try {
+                        // Force immediate UI update
+                        playerView.invalidate()
+                        
+                        // Get references to UI elements
+                        val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
+                            com.google.android.exoplayer2.ui.R.id.exo_progress
+                        )
+                        val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
+                        val positionText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_position)
+                        val durationText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_duration)
+                        
+                        // Get current window and position info
+                        val currentWindow = player.currentTimeline.getWindow(
+                            player.currentMediaItemIndex, Timeline.Window()
+                        )
+                        val currentPosition = player.contentPosition
+                        var duration = currentWindow.durationMs
+                        
+                        // For live streams with minimal delay, we need to be more aggressive
+                        // with real-time updates
+                        if (duration > 0) {
+                            // Store the last known duration if it's larger than what we have
+                            if (duration > lastKnownLiveDuration) {
+                                lastKnownLiveDuration = duration
+                            } else if (player.isPlaying) {
+                                // If we're playing but duration didn't increase, simulate
+                                // the duration increasing in real-time (faster updates)
+                                val timeSinceLastUpdate = System.currentTimeMillis() - lastLiveUpdateTime
+                                if (timeSinceLastUpdate > 0) {
+                                    // Increase duration at real-time rate
+                                    duration = lastKnownLiveDuration + timeSinceLastUpdate
+                                    lastKnownLiveDuration = duration
+                                }
+                            }
+                            lastLiveUpdateTime = System.currentTimeMillis()
+                            
+                            // Calculate how far behind live we are
+                            val timeBehindLive = duration - currentPosition
+                            
+                            // Tighter threshold for live edge (1 second)
+                            val isAtLiveEdge = timeBehindLive < 1000 // 1 second threshold for minimal delay
+                            
+                            // Update live indicator text
+                            liveText?.apply {
+                                visibility = View.VISIBLE
+                                
+                                if (isAtLiveEdge) {
+                                    // At live edge - show red LIVE indicator
+                                    text = "LIVE"
+                                    setTextColor(Color.RED)
+                                    setTypeface(typeface, Typeface.BOLD)
+                                    
+                                    // Add red dot for live indicator
+                                    val dotDrawable = GradientDrawable().apply {
+                                        shape = GradientDrawable.OVAL
+                                        setColor(Color.RED)
+                                        setSize(12, 12)
+                                    }
+                                    setCompoundDrawablesWithIntrinsicBounds(dotDrawable, null, null, null)
+                                    compoundDrawablePadding = 8
+                                } else {
+                                    // Behind live - show time behind
+                                    if (timeBehindLive >= 60000) {
+                                        // More than a minute behind
+                                        val minutes = timeBehindLive / 60000
+                                        text = "-${minutes}m"
+                                    } else {
+                                        // Less than a minute behind
+                                        val seconds = timeBehindLive / 1000
+                                        text = "-${seconds}s"
+                                    }
+                                    setTextColor(Color.WHITE)
+                                    setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
+                                }
+                            }
+                            
+                            // Update time bar for live streams with minimal delay
+                            timeBar?.apply {
+                                // Make sure time bar is visible and enabled
+                                visibility = View.VISIBLE
+                                isEnabled = true
+                                
+                                // Set colors based on live status
+                                setPlayedColor(if (isAtLiveEdge) Color.RED else Color.parseColor("#FFCC0000"))
+                                setScrubberColor(if (isAtLiveEdge) Color.RED else Color.WHITE)
+                                setBufferedColor(Color.parseColor("#40FFFFFF"))
+                                
+                                // For minimal delay, directly set position and duration
+                                setDuration(duration)
+                                
+                                // If playing, calculate a smoothly interpolated position
+                                if (player.isPlaying) {
+                                    val interpolatedPosition = if (isAtLiveEdge) {
+                                        // When at live edge, keep the scrubber at the end
+                                        duration
+                                    } else {
+                                        // When behind live, smoothly interpolate position
+                                        val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
+                                        currentPosition + (timeSincePositionUpdate * player.playbackParameters.speed).toLong()
+                                    }
+                                    setPosition(interpolatedPosition)
+                                } else {
+                                    setPosition(currentPosition)
+                                }
+                                
+                                // Update buffered position
+                                setBufferedPosition(player.bufferedPosition)
+                            }
+                            
+                            // Update position text with minimal delay
+                            positionText?.apply {
+                                if (isAtLiveEdge) {
+                                    // At live edge, show "LIVE"
+                                    text = "LIVE"
+                                    setTextColor(Color.RED)
+                                } else {
+                                    // When behind live, show the actual position with real-time updates
+                                    val adjustedPosition = if (player.isPlaying) {
+                                        // Smoothly interpolate position for real-time updates
+                                        val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
+                                        currentPosition + (timeSincePositionUpdate * player.playbackParameters.speed).toLong()
+                                    } else {
+                                        currentPosition
+                                    }
+                                    text = formatDuration(adjustedPosition)
+                                    setTextColor(Color.WHITE)
+                                }
+                            }
+                            
+                            // Update duration text
+                            durationText?.apply {
+                                text = formatDuration(duration)
+                            }
+                            
+                            // Update GO LIVE button visibility - show immediately when behind
+                            val goLiveButton = playerView.findViewById<Button>(goLiveButtonId)
+                            if (goLiveButton != null) {
+                                // For minimal delay, show GO LIVE button as soon as we're behind
+                                if (!isAtLiveEdge && timeBehindLive > 1000) { // 1 second threshold
+                                    if (goLiveButton.visibility != View.VISIBLE) {
+                                        // Show button immediately without animation
+                                        goLiveButton.visibility = View.VISIBLE
+                                    }
+                                } else {
+                                    if (goLiveButton.visibility == View.VISIBLE) {
+                                        // Hide button immediately
+                                        goLiveButton.visibility = View.GONE
+                                    }
+                                }
+                            }
+                            
+                            // Update last position time for smooth interpolation
+                            lastPositionUpdateTime = System.currentTimeMillis()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("PlayerActivity", "Error updating live progress: ${e.message}")
+                    }
+                }
+                
+                // Schedule next update - very frequent for minimal delay
+                if (isPlayerReady && !isDestroyed) {
+                    handler.postDelayed(this, updateInterval)
+                }
+            }
+        }
+        
+        // Start the updater immediately
+        handler.post(runnable)
+    }
+
+    // Ultra-fast GO LIVE button click handler for minimal delay
+    private fun setupGoLiveButtonClickHandler(goLiveButton: Button) {
+        goLiveButton.setOnClickListener {
+            try {
+                // Get the latest timeline window immediately
+                val currentWindow = player.currentTimeline.getWindow(
+                    player.currentMediaItemIndex, Timeline.Window()
+                )
+                
+                // For minimal delay, use a higher speed to catch up instantly
+                player.setPlaybackParameters(PlaybackParameters(2.0f))
+                
+                // Seek to the live edge immediately
+                player.seekTo(currentWindow.durationMs)
+                player.play()
+                
+                // Reset playback speed after a very short delay
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    player.setPlaybackParameters(PlaybackParameters(1.0f))
+                }, 300) // Very short delay
+                
+                // Update state immediately
+                isAtLiveEdge = true
+                lastLivePosition = currentWindow.durationMs
+                
+                // Hide button immediately without animation
+                goLiveButton.visibility = View.GONE
+                
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Error seeking to live: ${e.message}")
+            }
+        }
+    }
+
+    // Helper method to format duration in Hotstar cricket style (HH:MM:SS or MM:SS)
+    private fun formatDuration(durationMs: Long): String {
+        val totalSeconds = durationMs / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        
+        return if (hours > 0) {
+            String.format("%02d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%02d:%02d", minutes, seconds)
+        }
+    }
+
+    // Add this method to customize the player for live streams
+    private fun customizeLiveStreamPlayer() {
+        if (isLiveStream) {
+            try {
+                // Find the live text view
+                val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
+                liveText?.apply {
+                    visibility = View.VISIBLE
+                    text = "LIVE"
+                    setTextColor(Color.RED)
+                    
+                    // Make it more prominent
+                    setTypeface(typeface, Typeface.BOLD)
+                    
+                    // Add a red dot indicator before the text
+                    val drawable = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(Color.RED)
+                        setSize(16, 16)
+                    }
+                    setCompoundDrawablesWithIntrinsicBounds(drawable, null, null, null)
+                    compoundDrawablePadding = 8
+                }
+                
+                // Customize time bar for live streams
+                val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
+                    com.google.android.exoplayer2.ui.R.id.exo_progress
+                )
+                timeBar?.apply {
+                    // Make sure it's visible and enabled
+                    visibility = View.VISIBLE
+                    isEnabled = true
+                    
+                    // Set colors for live stream
+                    setPlayedColor(Color.RED)
+                    setScrubberColor(Color.RED)
+                    setBufferedColor(Color.parseColor("#4DFFFFFF")) // Semi-transparent white
+                }
+                
+                // Enable time shift for live streams
+                if (liveStreamTimeShiftEnabled) {
+                    player.seekBack()
+                    player.play()
+                }
+                
+                // Make sure the GO LIVE button is properly initialized
+                if (playerView.findViewById<Button>(goLiveButtonId) == null) {
+                    // This will create the GO LIVE button if it doesn't exist
+                    addGoLiveButton()
+                }
+                
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Error customizing live player: ${e.message}")
+            }
+        }
+    }
+
+    // Add this helper method to update the repeat button icon
+    private fun updateRepeatButtonIcon(repeatMode: Int) {
+        val iconResId = when (repeatMode) {
+            Player.REPEAT_MODE_ONE -> R.drawable.repeat_one_icon
+            Player.REPEAT_MODE_ALL -> R.drawable.repeat_all_icon
+            else -> R.drawable.repeat_off_icon
+        }
+        repeatButton.setImageResource(iconResId)
+    }
+
+    // Optimized position and duration text updates for live streaming
+    private fun setupLiveTextUpdater() {
+        if (!isLiveStream) return
+        
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val updateInterval = 33L // 30fps updates for ultra-smooth text changes
+        
+        val runnable = object : Runnable {
+            override fun run() {
+                if (isLiveStream && isPlayerReady && !isInPictureInPictureMode) {
+                    try {
+                        // Get references to text views
+                        val positionText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_position)
+                        val durationText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_duration)
+                        
+                        // Get current window and position info
+                        val currentWindow = player.currentTimeline.getWindow(
+                            player.currentMediaItemIndex, Timeline.Window()
+                        )
+                        val currentPosition = player.contentPosition
+                        var duration = currentWindow.durationMs
+                        
+                        // For live streams, we need to continuously update the duration
+                        if (duration > 0) {
+                            // Store the last known duration if it's larger than what we have
+                            if (duration > lastKnownLiveDuration) {
+                                lastKnownLiveDuration = duration
+                            } else if (player.isPlaying) {
+                                // If we're playing but duration didn't increase, simulate
+                                // the duration increasing in real-time
+                                val timeSinceLastUpdate = System.currentTimeMillis() - lastLiveUpdateTime
+                                if (timeSinceLastUpdate > 0) {
+                                    // Increase duration at real-time rate
+                                    duration = lastKnownLiveDuration + timeSinceLastUpdate
+                                    lastKnownLiveDuration = duration
+                                }
+                            }
+                            lastLiveUpdateTime = System.currentTimeMillis()
+                            
+                            // Calculate how far behind live we are
+                            val timeBehindLive = duration - currentPosition
+                            
+                            // Check if we're at live edge
+                            val isAtLiveEdge = timeBehindLive < 1000 // 1 second threshold
+                            
+                            // Update position text with zero delay
+                            positionText?.apply {
+                                if (isAtLiveEdge) {
+                                    // At live edge, show "LIVE"
+                                    text = "LIVE"
+                                    setTextColor(Color.RED)
+                                    setTypeface(typeface, Typeface.BOLD)
+                                } else {
+                                    // When behind live, show the actual position with real-time updates
+                                    val adjustedPosition = if (player.isPlaying) {
+                                        // Calculate exact position based on system time
+                                        val elapsedSinceLastPositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
+                                        val positionDelta = (elapsedSinceLastPositionUpdate * player.playbackParameters.speed).toLong()
+                                        currentPosition + positionDelta
+                                    } else {
+                                        currentPosition
+                                    }
+                                    
+                                    // Format position text
+                                    text = formatDuration(adjustedPosition)
+                                    setTextColor(Color.WHITE)
+                                    setTypeface(typeface, Typeface.NORMAL)
+                                }
+                            }
+                            
+                            // Update duration text with zero delay
+                            durationText?.apply {
+                                // For live streams, always show the current duration
+                                text = formatDuration(duration)
+                            }
+                            
+                            // Update last position time for smooth interpolation
+                            lastPositionUpdateTime = System.currentTimeMillis()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("PlayerActivity", "Error updating live text: ${e.message}")
+                    }
+                }
+                
+                // Schedule next update at display refresh rate
+                if (isPlayerReady && !isDestroyed) {
+                    handler.postDelayed(this, updateInterval)
+                }
+            }
+        }
+        
+        // Start the updater immediately
+        handler.post(runnable)
+    }
+
+    // Call this method from onStart() or initializePlayer()
+    private fun initializeLiveTextUpdates() {
+        if (isLiveStream) {
+            // Set up the text updater
+            setupLiveTextUpdater()
+            
+            // Also customize the text views
+            val positionText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_position)
+            val durationText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_duration)
+            
+            // Make position text more prominent when at live edge
+            positionText?.apply {
+                setTypeface(Typeface.DEFAULT_BOLD)
+                setTextSize(14f)
+            }
+            
+            // Make duration text slightly smaller
+            durationText?.apply {
+                setTextSize(14f)
+            }
         }
     }
 }

@@ -142,11 +142,15 @@ class URLActivity : AppCompatActivity() {
             return true
         }
 
-        // Check for streaming keywords in the URL
+        // Enhanced check for streaming keywords in the URL
+        // Added more keywords related to cricket and live sports
         return lowercaseUrl.contains("stream") || 
                lowercaseUrl.contains("live") || 
                lowercaseUrl.contains("video") ||
-               lowercaseUrl.contains("play")
+               lowercaseUrl.contains("play") ||
+               lowercaseUrl.contains("cricket") ||
+               lowercaseUrl.contains("sport") ||
+               lowercaseUrl.contains("match")
     }
 
     private fun detectUrlType(url: String): String {
@@ -167,6 +171,11 @@ class URLActivity : AppCompatActivity() {
             lowercaseUrl.startsWith("rtp://") -> "RTP"
             lowercaseUrl.startsWith("mms://") -> "MMS"
             lowercaseUrl.startsWith("srt://") -> "SRT"
+            // Add special detection for live content
+            lowercaseUrl.contains("live") || 
+            lowercaseUrl.contains("stream") || 
+            lowercaseUrl.contains("cricket") || 
+            lowercaseUrl.contains("match") -> "LIVE"
             else -> "HTTP"
         }
     }
@@ -201,14 +210,23 @@ class URLActivity : AppCompatActivity() {
 
             // Add new channel with URL type detection
             val urlType = detectUrlType(url)
+            val isLiveStream = urlType == "LIVE" || 
+                              urlType == "HLS" || 
+                              url.lowercase().contains("live") ||
+                              url.lowercase().contains("cricket") ||
+                              url.lowercase().contains("match")
+            
             val newLinks = currentLinks.toMutableSet()
             
-            // Format: title###url###urlType###userAgent
+            // Format: title###url###urlType###userAgent###isLiveStream
             val channelData = buildString {
                 append("${video.name}###${video.url}###$urlType")
                 if (!video.userAgent.isNullOrEmpty()) {
                     append("###${video.userAgent}")
+                } else {
+                    append("###")
                 }
+                append("###$isLiveStream")
             }
             
             newLinks.add(channelData)
