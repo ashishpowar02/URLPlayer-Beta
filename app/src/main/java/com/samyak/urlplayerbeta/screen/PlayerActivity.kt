@@ -1817,6 +1817,16 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             // Set initial duration for the progress bar (30 minutes buffer)
             liveStreamDuration = 30 * 60 * 1000
             
+            // Make the time bar more responsive for live streams
+            timeBar?.apply {
+                // Set colors for live stream
+                setPlayedColor(Color.RED)
+                setScrubberColor(Color.RED)
+                setBufferedColor(Color.parseColor("#4DFFFFFF")) // Semi-transparent white
+                
+                // No size customization - just use defaults
+            }
+            
             // Add a listener to track when we're at the live edge
             player.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -1825,7 +1835,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                             // When playing resumes, check if we're at live edge
                             val isAtLiveEdge = player.contentPosition >= player.currentTimeline.getWindow(
                                 player.currentMediaItemIndex, Timeline.Window()
-                            ).durationMs - 5000 // Within 5 seconds of live edge
+                            ).durationMs - 500 // Within 500ms of live edge
                             
                             if (isAtLiveEdge) {
                                 // Update UI to show we're at live edge
@@ -1833,10 +1843,54 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                     visibility = View.VISIBLE
                                     setTextColor(Color.RED)
                                     text = "LIVE"
+                                    
+                                    // Add a small red dot before the text (Hotstar style)
+                                    val dotDrawable = GradientDrawable().apply {
+                                        shape = GradientDrawable.OVAL
+                                        setColor(Color.RED)
+                                        setSize(12, 12)
+                                    }
+                                    setCompoundDrawablesWithIntrinsicBounds(dotDrawable, null, null, null)
+                                    compoundDrawablePadding = 8
                                 }
                             }
                         } catch (e: Exception) {
                             Log.e("PlayerActivity", "Error in live edge check: ${e.message}")
+                        }
+                    }
+                }
+                
+                override fun onPositionDiscontinuity(
+                    oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo,
+                    reason: Int
+                ) {
+                    // When position changes discontinuously (like after seeking)
+                    if (isLiveStream) {
+                        try {
+                            val currentWindow = player.currentTimeline.getWindow(
+                                player.currentMediaItemIndex, Timeline.Window()
+                            )
+                            val duration = currentWindow.durationMs
+                            val currentPosition = player.contentPosition
+                            
+                            // Check if we're at live edge after seeking
+                            val isAtLiveEdge = currentPosition >= duration - 500
+                            
+                            // Update UI immediately
+                            updateLiveEdgeIndicator(isAtLiveEdge)
+                            
+                            // Update GO LIVE button visibility
+                            val goLiveButton = playerView.findViewById<Button>(goLiveButtonId)
+                            if (goLiveButton != null) {
+                                if (!isAtLiveEdge) {
+                                    goLiveButton.visibility = View.VISIBLE
+                                } else {
+                                    goLiveButton.visibility = View.GONE
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("PlayerActivity", "Error in position discontinuity: ${e.message}")
                         }
                     }
                 }
@@ -1926,7 +1980,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                             
                             // Chain them together
                             animSet.playSequentially(pressEffect, releaseEffect, normalizeEffect, fadeOut)
-                            animSet.duration = 300 // Faster animation for immediate feedback
+                            animSet.duration = 200 // Even faster animation for immediate feedback
                             animSet.start()
 
                             // Show a red flash effect across the screen (like Hotstar does)
@@ -1945,7 +1999,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                             val flashOut = ObjectAnimator.ofFloat(flashView, "alpha", 0.3f, 0f)
                             val flashAnim = AnimatorSet()
                             flashAnim.playSequentially(flashIn, flashOut)
-                            flashAnim.duration = 300 // Faster animation
+                            flashAnim.duration = 200 // Faster animation
                             flashAnim.addListener(object : AnimatorListenerAdapter() {
                                 override fun onAnimationEnd(animation: Animator) {
                                     (playerView as FrameLayout).removeView(flashView)
@@ -1960,7 +2014,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
                             // Hotstar optimization: Temporarily increase playback speed to catch up
                             val originalSpeed = player.playbackParameters.speed
-                            player.setPlaybackParameters(PlaybackParameters(1.5f))
+                            player.setPlaybackParameters(PlaybackParameters(2.0f)) // Even faster catch-up
                             
                             // Seek to the live edge immediately
                             player.seekTo(currentWindow.durationMs)
@@ -1969,7 +2023,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                             // Reset playback speed after a short delay
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                 player.setPlaybackParameters(PlaybackParameters(originalSpeed))
-                            }, 800) // Shorter delay for immediate response
+                            }, 500) // Shorter delay for immediate response
 
                             // Update state immediately
                             isAtLiveEdge = true
@@ -2008,8 +2062,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             val duration = currentWindow.durationMs
             if (duration <= 0) return
             
-            // Get current position
-            val currentPosition = player.contentPosition
+            // Get current position with real-time interpolation
+            val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
+            val currentPosition = if (player.isPlaying) {
+                player.contentPosition + (timeSincePositionUpdate * player.playbackParameters.speed).toLong()
+            } else {
+                player.contentPosition
+            }
             
             // Calculate how far behind live we are
             val timeBehindLive = duration - currentPosition
@@ -2019,7 +2078,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             
             // Check if we're at live edge (within threshold)
             val wasAtLiveEdge = isAtLiveEdge
-            isAtLiveEdge = timeBehindLive < behindLiveThreshold
+            isAtLiveEdge = timeBehindLive < 500 // 500ms threshold for minimal delay
             
             // Find the GO LIVE button
             val goLiveButton = playerView.findViewById<Button>(goLiveButtonId) ?: return
@@ -2059,38 +2118,21 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             }
             
             // Handle GO LIVE button visibility with immediate response
-            if (!isAtLiveEdge && timeBehindLive > behindLiveThreshold) {
+            if (!isAtLiveEdge && timeBehindLive > 1000) { // 1 second threshold
                 // We're behind live, show the button immediately if it was hidden
                 if (goLiveButton.visibility != View.VISIBLE) {
                     goLiveButton.alpha = 0f
                     goLiveButton.visibility = View.VISIBLE
                     
                     // Fade in animation - quick and responsive
-                    val fadeIn = ObjectAnimator.ofFloat(goLiveButton, "alpha", 0f, 1f)
-                    fadeIn.duration = 200
-                    fadeIn.start()
-                    
-                    // Also add a slight bounce effect (Hotstar style)
-                    val scaleX = ObjectAnimator.ofFloat(goLiveButton, "scaleX", 0.9f, 1.05f, 1f)
-                    val scaleY = ObjectAnimator.ofFloat(goLiveButton, "scaleY", 0.9f, 1.05f, 1f)
-                    
-                    val bounceSet = AnimatorSet()
-                    bounceSet.playTogether(scaleX, scaleY)
-                    bounceSet.duration = 300
-                    bounceSet.start()
+                    goLiveButton.animate().alpha(1f).setDuration(150).start()
                 }
             } else {
                 // We're at live edge, hide the button immediately if it was visible
                 if (goLiveButton.visibility == View.VISIBLE) {
                     // Fade out animation - quick and responsive
-                    val fadeOut = ObjectAnimator.ofFloat(goLiveButton, "alpha", 1f, 0f)
-                    fadeOut.duration = 200
-                    fadeOut.addListener(object : AnimatorListenerAdapter() {
-                        override fun onAnimationEnd(animation: android.animation.Animator) {
-                            goLiveButton.visibility = View.GONE
-                        }
-                    })
-                    fadeOut.start()
+                    goLiveButton.animate().alpha(0f).setDuration(150)
+                        .withEndAction { goLiveButton.visibility = View.GONE }.start()
                 }
             }
             
@@ -2098,6 +2140,9 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             if (!wasAtLiveEdge && isAtLiveEdge) {
                 showCustomToast("You're now watching live")
             }
+            
+            // Update last position time for smooth interpolation
+            lastPositionUpdateTime = System.currentTimeMillis()
             
         } catch (e: Exception) {
             Log.e("PlayerActivity", "Error checking live position: ${e.message}")
@@ -2697,187 +2742,6 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         }
     }
 
-    // Enhanced Disney+ Hotstar cricket live streaming implementation
-    private fun setupLiveProgressUpdater() {
-        if (!isLiveStream) return
-        
-        val handler = android.os.Handler(android.os.Looper.getMainLooper())
-        val updateInterval = 50L // Update 20 times per second for ultra-smooth updates
-        
-        val runnable = object : Runnable {
-            override fun run() {
-                if (isLiveStream && isPlayerReady && !isInPictureInPictureMode) {
-                    try {
-                        // Force immediate UI update
-                        playerView.invalidate()
-                        
-                        // Get references to UI elements
-                        val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
-                            com.google.android.exoplayer2.ui.R.id.exo_progress
-                        )
-                        val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
-                        val positionText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_position)
-                        val durationText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_duration)
-                        
-                        // Get current window and position info
-                        val currentWindow = player.currentTimeline.getWindow(
-                            player.currentMediaItemIndex, Timeline.Window()
-                        )
-                        val currentPosition = player.contentPosition
-                        var duration = currentWindow.durationMs
-                        
-                        // For live streams with minimal delay, we need to be more aggressive
-                        // with real-time updates
-                        if (duration > 0) {
-                            // Store the last known duration if it's larger than what we have
-                            if (duration > lastKnownLiveDuration) {
-                                lastKnownLiveDuration = duration
-                            } else if (player.isPlaying) {
-                                // If we're playing but duration didn't increase, simulate
-                                // the duration increasing in real-time (faster updates)
-                                val timeSinceLastUpdate = System.currentTimeMillis() - lastLiveUpdateTime
-                                if (timeSinceLastUpdate > 0) {
-                                    // Increase duration at real-time rate
-                                    duration = lastKnownLiveDuration + timeSinceLastUpdate
-                                    lastKnownLiveDuration = duration
-                                }
-                            }
-                            lastLiveUpdateTime = System.currentTimeMillis()
-                            
-                            // Calculate how far behind live we are
-                            val timeBehindLive = duration - currentPosition
-                            
-                            // Tighter threshold for live edge (1 second)
-                            val isAtLiveEdge = timeBehindLive < 1000 // 1 second threshold for minimal delay
-                            
-                            // Update live indicator text
-                            liveText?.apply {
-                                visibility = View.VISIBLE
-                                
-                                if (isAtLiveEdge) {
-                                    // At live edge - show red LIVE indicator
-                                    text = "LIVE"
-                                    setTextColor(Color.RED)
-                                    setTypeface(typeface, Typeface.BOLD)
-                                    
-                                    // Add red dot for live indicator
-                                    val dotDrawable = GradientDrawable().apply {
-                                        shape = GradientDrawable.OVAL
-                                        setColor(Color.RED)
-                                        setSize(12, 12)
-                                    }
-                                    setCompoundDrawablesWithIntrinsicBounds(dotDrawable, null, null, null)
-                                    compoundDrawablePadding = 8
-                                } else {
-                                    // Behind live - show time behind
-                                    if (timeBehindLive >= 60000) {
-                                        // More than a minute behind
-                                        val minutes = timeBehindLive / 60000
-                                        text = "-${minutes}m"
-                                    } else {
-                                        // Less than a minute behind
-                                        val seconds = timeBehindLive / 1000
-                                        text = "-${seconds}s"
-                                    }
-                                    setTextColor(Color.WHITE)
-                                    setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
-                                }
-                            }
-                            
-                            // Update time bar for live streams with minimal delay
-                            timeBar?.apply {
-                                // Make sure time bar is visible and enabled
-                                visibility = View.VISIBLE
-                                isEnabled = true
-                                
-                                // Set colors based on live status
-                                setPlayedColor(if (isAtLiveEdge) Color.RED else Color.parseColor("#FFCC0000"))
-                                setScrubberColor(if (isAtLiveEdge) Color.RED else Color.WHITE)
-                                setBufferedColor(Color.parseColor("#40FFFFFF"))
-                                
-                                // For minimal delay, directly set position and duration
-                                setDuration(duration)
-                                
-                                // If playing, calculate a smoothly interpolated position
-                                if (player.isPlaying) {
-                                    val interpolatedPosition = if (isAtLiveEdge) {
-                                        // When at live edge, keep the scrubber at the end
-                                        duration
-                                    } else {
-                                        // When behind live, smoothly interpolate position
-                                        val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
-                                        currentPosition + (timeSincePositionUpdate * player.playbackParameters.speed).toLong()
-                                    }
-                                    setPosition(interpolatedPosition)
-                                } else {
-                                    setPosition(currentPosition)
-                                }
-                                
-                                // Update buffered position
-                                setBufferedPosition(player.bufferedPosition)
-                            }
-                            
-                            // Update position text with minimal delay
-                            positionText?.apply {
-                                if (isAtLiveEdge) {
-                                    // At live edge, show "LIVE"
-                                    text = "LIVE"
-                                    setTextColor(Color.RED)
-                                } else {
-                                    // When behind live, show the actual position with real-time updates
-                                    val adjustedPosition = if (player.isPlaying) {
-                                        // Smoothly interpolate position for real-time updates
-                                        val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
-                                        currentPosition + (timeSincePositionUpdate * player.playbackParameters.speed).toLong()
-                                    } else {
-                                        currentPosition
-                                    }
-                                    text = formatDuration(adjustedPosition)
-                                    setTextColor(Color.WHITE)
-                                }
-                            }
-                            
-                            // Update duration text
-                            durationText?.apply {
-                                text = formatDuration(duration)
-                            }
-                            
-                            // Update GO LIVE button visibility - show immediately when behind
-                            val goLiveButton = playerView.findViewById<Button>(goLiveButtonId)
-                            if (goLiveButton != null) {
-                                // For minimal delay, show GO LIVE button as soon as we're behind
-                                if (!isAtLiveEdge && timeBehindLive > 1000) { // 1 second threshold
-                                    if (goLiveButton.visibility != View.VISIBLE) {
-                                        // Show button immediately without animation
-                                        goLiveButton.visibility = View.VISIBLE
-                                    }
-                                } else {
-                                    if (goLiveButton.visibility == View.VISIBLE) {
-                                        // Hide button immediately
-                                        goLiveButton.visibility = View.GONE
-                                    }
-                                }
-                            }
-                            
-                            // Update last position time for smooth interpolation
-                            lastPositionUpdateTime = System.currentTimeMillis()
-                        }
-                    } catch (e: Exception) {
-                        Log.e("PlayerActivity", "Error updating live progress: ${e.message}")
-                    }
-                }
-                
-                // Schedule next update - very frequent for minimal delay
-                if (isPlayerReady && !isDestroyed) {
-                    handler.postDelayed(this, updateInterval)
-                }
-            }
-        }
-        
-        // Start the updater immediately
-        handler.post(runnable)
-    }
-
     // Ultra-fast GO LIVE button click handler for minimal delay
     private fun setupGoLiveButtonClickHandler(goLiveButton: Button) {
         goLiveButton.setOnClickListener {
@@ -3048,22 +2912,18 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                 } else {
                                     // When behind live, show the actual position with real-time updates
                                     val adjustedPosition = if (player.isPlaying) {
-                                        // Calculate exact position based on system time
-                                        val elapsedSinceLastPositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
-                                        val positionDelta = (elapsedSinceLastPositionUpdate * player.playbackParameters.speed).toLong()
-                                        currentPosition + positionDelta
+                                        // Smoothly interpolate position for real-time updates
+                                        val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
+                                        currentPosition + (timeSincePositionUpdate * player.playbackParameters.speed).toLong()
                                     } else {
                                         currentPosition
                                     }
-                                    
-                                    // Format position text
                                     text = formatDuration(adjustedPosition)
                                     setTextColor(Color.WHITE)
-                                    setTypeface(typeface, Typeface.NORMAL)
                                 }
                             }
                             
-                            // Update duration text with zero delay
+                            // Update duration text
                             durationText?.apply {
                                 // For live streams, always show the current duration
                                 text = formatDuration(duration)
@@ -3186,5 +3046,210 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         return url?.contains("akamaized", ignoreCase = true) == true &&
                (url.contains("hdntl=exp", ignoreCase = true) || 
                 url.contains("hmac=", ignoreCase = true))
+    }
+
+    // Enhanced Disney+ Hotstar cricket live streaming implementation
+    private fun setupLiveProgressUpdater() {
+        if (!isLiveStream) return
+        
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val updateInterval = 16L // Update at ~60fps for ultra-smooth updates
+        
+        val runnable = object : Runnable {
+            override fun run() {
+                if (isLiveStream && isPlayerReady && !isInPictureInPictureMode) {
+                    try {
+                        // Force immediate UI update
+                        playerView.invalidate()
+                        
+                        // Get references to UI elements
+                        val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
+                            com.google.android.exoplayer2.ui.R.id.exo_progress
+                        )
+                        val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
+                        val positionText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_position)
+                        val durationText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_duration)
+                        
+                        // Get current window and position info
+                        val currentWindow = player.currentTimeline.getWindow(
+                            player.currentMediaItemIndex, Timeline.Window()
+                        )
+                        val currentPosition = player.contentPosition
+                        var duration = currentWindow.durationMs
+                        
+                        // For live streams with minimal delay, we need to be more aggressive
+                        // with real-time updates
+                        if (duration > 0) {
+                            // Store the last known duration if it's larger than what we have
+                            if (duration > lastKnownLiveDuration) {
+                                lastKnownLiveDuration = duration
+                            } else if (player.isPlaying) {
+                                // If we're playing but duration didn't increase, simulate
+                                // the duration increasing in real-time (faster updates)
+                                val timeSinceLastUpdate = System.currentTimeMillis() - lastLiveUpdateTime
+                                if (timeSinceLastUpdate > 0) {
+                                    // Increase duration at real-time rate
+                                    duration = lastKnownLiveDuration + timeSinceLastUpdate
+                                    lastKnownLiveDuration = duration
+                                }
+                            }
+                            lastLiveUpdateTime = System.currentTimeMillis()
+                            
+                            // Calculate how far behind live we are
+                            val timeBehindLive = duration - currentPosition
+                            
+                            // Tighter threshold for live edge (500ms)
+                            val isAtLiveEdge = timeBehindLive < 500 // 500ms threshold for minimal delay
+                            
+                            // Update live indicator text
+                            liveText?.apply {
+                                visibility = View.VISIBLE
+                                
+                                if (isAtLiveEdge) {
+                                    // At live edge - show red LIVE indicator
+                                    text = "LIVE"
+                                    setTextColor(Color.RED)
+                                    setTypeface(typeface, Typeface.BOLD)
+                                    
+                                    // Add red dot for live indicator
+                                    val dotDrawable = GradientDrawable().apply {
+                                        shape = GradientDrawable.OVAL
+                                        setColor(Color.RED)
+                                        setSize(12, 12)
+                                    }
+                                    setCompoundDrawablesWithIntrinsicBounds(dotDrawable, null, null, null)
+                                    compoundDrawablePadding = 8
+                                    
+                                    // Add subtle pulsing animation for the LIVE text when at edge
+                                    if (!isLiveTextAnimating) {
+                                        isLiveTextAnimating = true
+                                        val scaleX = ObjectAnimator.ofFloat(this, "scaleX", 1f, 1.1f, 1f)
+                                        val scaleY = ObjectAnimator.ofFloat(this, "scaleY", 1f, 1.1f, 1f)
+                                        val animSet = AnimatorSet()
+                                        animSet.playTogether(scaleX, scaleY)
+                                        animSet.duration = 1500
+                                        animSet.addListener(object : AnimatorListenerAdapter() {
+                                            override fun onAnimationEnd(animation: Animator) {
+                                                if (isAtLiveEdge && isAttachedToWindow) {
+                                                    animSet.start()
+                                                } else {
+                                                    isLiveTextAnimating = false
+                                                }
+                                            }
+                                        })
+                                        animSet.start()
+                                    }
+                                } else {
+                                    // Behind live - show time behind
+                                    isLiveTextAnimating = false
+                                    if (timeBehindLive >= 60000) {
+                                        // More than a minute behind
+                                        val minutes = timeBehindLive / 60000
+                                        text = "-${minutes}m"
+                                    } else {
+                                        // Less than a minute behind
+                                        val seconds = timeBehindLive / 1000
+                                        text = "-${seconds}s"
+                                    }
+                                    setTextColor(Color.WHITE)
+                                    setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
+                                }
+                            }
+                            
+                            // Update time bar for live streams with minimal delay
+                            timeBar?.apply {
+                                // Make sure time bar is visible and enabled
+                                visibility = View.VISIBLE
+                                isEnabled = true
+                                
+                                // Set colors based on live status
+                                setPlayedColor(if (isAtLiveEdge) Color.RED else Color.parseColor("#FFCC0000"))
+                                setScrubberColor(if (isAtLiveEdge) Color.RED else Color.WHITE)
+                                setBufferedColor(Color.parseColor("#40FFFFFF"))
+                                
+                                // For minimal delay, directly set position and duration
+                                setDuration(duration)
+                                
+                                // If playing, calculate a smoothly interpolated position
+                                if (player.isPlaying) {
+                                    val interpolatedPosition = if (isAtLiveEdge) {
+                                        // When at live edge, keep the scrubber at the end
+                                        duration
+                                    } else {
+                                        // When behind live, smoothly interpolate position
+                                        val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
+                                        currentPosition + (timeSincePositionUpdate * player.playbackParameters.speed).toLong()
+                                    }
+                                    setPosition(interpolatedPosition)
+                                } else {
+                                    setPosition(currentPosition)
+                                }
+                                
+                                // Update buffered position
+                                setBufferedPosition(player.bufferedPosition)
+                            }
+                            
+                            // Update position text with minimal delay
+                            positionText?.apply {
+                                if (isAtLiveEdge) {
+                                    // At live edge, show "LIVE"
+                                    text = "LIVE"
+                                    setTextColor(Color.RED)
+                                } else {
+                                    // When behind live, show the actual position with real-time updates
+                                    val adjustedPosition = if (player.isPlaying) {
+                                        // Smoothly interpolate position for real-time updates
+                                        val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
+                                        currentPosition + (timeSincePositionUpdate * player.playbackParameters.speed).toLong()
+                                    } else {
+                                        currentPosition
+                                    }
+                                    text = formatDuration(adjustedPosition)
+                                    setTextColor(Color.WHITE)
+                                }
+                            }
+                            
+                            // Update duration text
+                            durationText?.apply {
+                                text = formatDuration(duration)
+                            }
+                            
+                            // Update GO LIVE button visibility - show immediately when behind
+                            val goLiveButton = playerView.findViewById<Button>(goLiveButtonId)
+                            if (goLiveButton != null) {
+                                // For minimal delay, show GO LIVE button as soon as we're behind
+                                if (!isAtLiveEdge && timeBehindLive > 1000) { // 1 second threshold
+                                    if (goLiveButton.visibility != View.VISIBLE) {
+                                        // Show button with a quick fade-in
+                                        goLiveButton.alpha = 0f
+                                        goLiveButton.visibility = View.VISIBLE
+                                        goLiveButton.animate().alpha(1f).setDuration(150).start()
+                                    }
+                                } else {
+                                    if (goLiveButton.visibility == View.VISIBLE) {
+                                        // Hide button with a quick fade-out
+                                        goLiveButton.animate().alpha(0f).setDuration(150)
+                                            .withEndAction { goLiveButton.visibility = View.GONE }.start()
+                                    }
+                                }
+                            }
+                            
+                            // Update last position time for smooth interpolation
+                            lastPositionUpdateTime = System.currentTimeMillis()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("PlayerActivity", "Error updating live progress: ${e.message}")
+                    }
+                }
+                
+                // Schedule next update - very frequent for minimal delay
+                if (isPlayerReady && !isDestroyed) {
+                    handler.postDelayed(this, updateInterval)
+                }
+            }
+        }
+        
+        // Start the updater immediately
+        handler.post(runnable)
     }
 }
