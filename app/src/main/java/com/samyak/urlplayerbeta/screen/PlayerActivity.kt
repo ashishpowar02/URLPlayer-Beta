@@ -861,38 +861,62 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
             playerView.player = player
 
-            // Create data source factory with enhanced headers for PHP streams
-            val dataSourceFactory = DefaultHttpDataSource.Factory()
-                .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
-                .setAllowCrossProtocolRedirects(true)
-                .setDefaultRequestProperties(mapOf(
-                    "Referer" to (url ?: ""),
-                    "Accept" to "*/*",
-                    "Origin" to "https://${Uri.parse(url)?.host ?: ""}"
-                ))
-
-            // Check if this is a live stream
-            isLiveStream = url?.contains(".m3u8", ignoreCase = true) == true ||
-                    url?.contains(".m3u", ignoreCase = true) == true ||
-                    url?.contains("live", ignoreCase = true) == true ||
-                    url?.contains("stream", ignoreCase = true) == true ||
-                    url?.contains(".php", ignoreCase = true) == true || // PHP streams are typically live
-                    url?.contains("tv", ignoreCase = true) == true ||
-                    url?.contains("tata", ignoreCase = true) == true
-
+            // Create data source factory with enhanced headers
+            val dataSourceFactory = if (isAkamaizedStream(url)) {
+                // Special handling for Akamaized streams
+                DefaultHttpDataSource.Factory()
+                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(15000)
+                    .setReadTimeoutMs(15000)
+                    .setDefaultRequestProperties(mapOf(
+                        "Accept" to "*/*",
+                        "Accept-Language" to "en-US,en;q=0.9",
+                        "Origin" to "https://${Uri.parse(url)?.host ?: ""}",
+                        "Referer" to "https://${Uri.parse(url)?.host ?: ""}",
+                        "Connection" to "keep-alive",
+                        "Sec-Fetch-Dest" to "empty",
+                        "Sec-Fetch-Mode" to "cors",
+                        "Sec-Fetch-Site" to "cross-site"
+                    ))
+            } else {
+                // Regular data source factory for other streams
+                DefaultHttpDataSource.Factory()
+                    .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(15000)
+                    .setReadTimeoutMs(15000)
+                    .setDefaultRequestProperties(mapOf(
+                        "Referer" to (url ?: ""),
+                        "Accept" to "*/*",
+                        "Origin" to "https://${Uri.parse(url)?.host ?: ""}",
+                        "Connection" to "keep-alive"
+                    ))
+            }
+            
             // Create media source based on URL type
             val mediaItem = MediaItem.fromUri(url ?: return)
             val mediaSource = when {
                 // HLS streams
-                url?.endsWith(".m3u8", ignoreCase = true) == true ||
-                        url?.contains(".m3u8?", ignoreCase = true) == true ||  // Added support for query params
-                        url?.endsWith(".m3u", ignoreCase = true) == true ||
-                        url?.endsWith(".hls", ignoreCase = true) == true ||
+                url?.contains(".m3u8", ignoreCase = true) == true ||
+                        url?.contains(".m3u", ignoreCase = true) == true ||
+                        url?.contains(".hls", ignoreCase = true) == true ||
+                        url?.contains("akamaized", ignoreCase = true) == true ||
+                        url?.contains("hdntl=exp", ignoreCase = true) == true ||
+                        url?.contains("hmac=", ignoreCase = true) == true ||
                         (url?.contains(".php", ignoreCase = true) == true && 
-                         url?.contains("?", ignoreCase = true) == true) -> {  // PHP-based streams
+                         url?.contains("?", ignoreCase = true) == true) -> {
                     isLiveStream = true
-                    HlsMediaSource.Factory(dataSourceFactory)
-                        .createMediaSource(mediaItem)
+                    if (isAkamaizedStream(url)) {
+                        // Special handling for Akamaized streams
+                        HlsMediaSource.Factory(dataSourceFactory)
+                            .setAllowChunklessPreparation(true)
+                            .createMediaSource(mediaItem)
+                    } else {
+                        // Regular HLS handling
+                        HlsMediaSource.Factory(dataSourceFactory)
+                            .createMediaSource(mediaItem)
+                    }
                 }
 
                 // DASH streams
@@ -946,6 +970,9 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 // Add these new calls
                 handleLiveStreamSeeking()
                 addGoLiveButton()
+                
+                // Initialize live text updates
+                initializeLiveTextUpdates()
             }
 
             // Add player listener
@@ -992,12 +1019,34 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    // Log the error for debugging
+                    Log.e("PlayerActivity", "Player error: ${error.message}")
+                    
                     // Show error message
                     errorTextView.visibility = View.VISIBLE
-                    errorTextView.text = "Error: ${error.message}"
-
-                    // Log the error
-                    error.printStackTrace()
+                    progressBar.visibility = View.GONE
+                    
+                    // Check if it's an authentication error
+                    if (error.cause?.message?.contains("Input does not start with the #EXTM3U header") == true) {
+                        errorTextView.text = "Authentication error or invalid stream URL. The stream may have expired."
+                        
+                        // Show retry button if not already added
+                        if (errorTextView.parent is ViewGroup) {
+                            val container = errorTextView.parent as ViewGroup
+                            if (container.findViewById<Button>(R.id.retry_button) == null) {
+                                val retryButton = Button(this@PlayerActivity).apply {
+                                    id = R.id.retry_button
+                                    text = "Retry with Browser Headers"
+                                    setOnClickListener {
+                                        retryWithBrowserHeaders()
+                                    }
+                                }
+                                container.addView(retryButton)
+                            }
+                        }
+                    } else {
+                        errorTextView.text = "Playback error: ${error.message}"
+                    }
                 }
             })
 
@@ -1750,7 +1799,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     // Fix the configureLiveTimeBar method
     private fun configureLiveTimeBar() {
         try {
-            // Get the time bar from player view - use fully qualified ID
+            // Find the time bar from player view - use fully qualified ID
             val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
                 com.google.android.exoplayer2.ui.R.id.exo_progress
             )
@@ -3059,5 +3108,82 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 setTextSize(14f)
             }
         }
+    }
+
+    // Add this method to retry with browser headers
+    private fun retryWithBrowserHeaders() {
+        try {
+            // Release current player
+            if (::player.isInitialized) {
+                player.release()
+            }
+            
+            // Hide error view
+            errorTextView.visibility = View.GONE
+            progressBar.visibility = View.VISIBLE
+            
+            // Create enhanced data source factory with browser-like headers
+            val enhancedDataSourceFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15000)
+                .setReadTimeoutMs(15000)
+                .setDefaultRequestProperties(mapOf(
+                    "Accept" to "*/*",
+                    "Accept-Language" to "en-US,en;q=0.9",
+                    "Origin" to "https://${Uri.parse(url)?.host ?: ""}",
+                    "Referer" to "https://${Uri.parse(url)?.host ?: ""}",
+                    "Connection" to "keep-alive",
+                    "Sec-Fetch-Dest" to "empty",
+                    "Sec-Fetch-Mode" to "cors",
+                    "Sec-Fetch-Site" to "cross-site",
+                    "Pragma" to "no-cache",
+                    "Cache-Control" to "no-cache"
+                ))
+            
+            // Create new player
+            trackSelector = DefaultTrackSelector(this).apply {
+                setParameters(buildUponParameters().setMaxVideoSizeSd())
+            }
+            
+            player = ExoPlayer.Builder(this)
+                .setTrackSelector(trackSelector)
+                .build()
+            
+            playerView.player = player
+            
+            // Create media source with enhanced factory
+            val mediaItem = MediaItem.fromUri(url ?: return)
+            val mediaSource = HlsMediaSource.Factory(enhancedDataSourceFactory)
+                .createMediaSource(mediaItem)
+            
+            player.setMediaSource(mediaSource)
+            player.seekTo(playbackPosition)
+            player.playWhenReady = true
+            player.prepare()
+            
+            // Re-add player listeners
+            setupPlayerListeners()
+            
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error retrying with browser headers: ${e.message}")
+            errorTextView.visibility = View.VISIBLE
+            errorTextView.text = "Failed to retry: ${e.message}"
+            progressBar.visibility = View.GONE
+        }
+    }
+
+    // Add this method to set up player listeners
+    private fun setupPlayerListeners() {
+        player.addListener(object : Player.Listener {
+            // Copy your existing listener implementation here
+        })
+    }
+
+    // Add this method to check if URL is an Akamaized stream
+    private fun isAkamaizedStream(url: String?): Boolean {
+        return url?.contains("akamaized", ignoreCase = true) == true &&
+               (url.contains("hdntl=exp", ignoreCase = true) || 
+                url.contains("hmac=", ignoreCase = true))
     }
 }
