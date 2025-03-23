@@ -117,17 +117,20 @@ class UpdateActivity : AppCompatActivity() {
                url.startsWith("rtmp://") || 
                url.startsWith("rtsp://") ||
                url.startsWith("udp://") ||
-               url.startsWith("rtp://")
+               url.startsWith("rtp://") ||
+               url.contains(".php?") // Added support for PHP-based streams
     }
 
     private fun detectUrlType(url: String): String {
         val lowercaseUrl = url.lowercase()
         return when {
             lowercaseUrl.endsWith(".m3u8") -> "HLS"
+            lowercaseUrl.contains(".m3u8?") -> "HLS" // Added support for m3u8 with query params
             lowercaseUrl.endsWith(".mp4") -> "MP4"
             lowercaseUrl.endsWith(".avi") -> "AVI"
             lowercaseUrl.endsWith(".mkv") -> "MKV"
             lowercaseUrl.endsWith(".m3u") -> "M3U"
+            lowercaseUrl.endsWith(".mpd") -> "DASH"
             lowercaseUrl.endsWith(".ts") -> "TS"
             lowercaseUrl.endsWith(".mov") -> "MOV"
             lowercaseUrl.endsWith(".webm") -> "WEBM"
@@ -137,6 +140,15 @@ class UpdateActivity : AppCompatActivity() {
             lowercaseUrl.startsWith("rtp://") -> "RTP"
             lowercaseUrl.startsWith("mms://") -> "MMS"
             lowercaseUrl.startsWith("srt://") -> "SRT"
+            // Add special detection for PHP-based streams
+            lowercaseUrl.contains(".php") && lowercaseUrl.contains("?") -> "HLS"
+            // Add special detection for live content
+            lowercaseUrl.contains("live") || 
+            lowercaseUrl.contains("stream") || 
+            lowercaseUrl.contains("cricket") || 
+            lowercaseUrl.contains("match") ||
+            lowercaseUrl.contains("tv") ||
+            lowercaseUrl.contains("tata") -> "LIVE"
             else -> "HTTP"
         }
     }
@@ -163,7 +175,27 @@ class UpdateActivity : AppCompatActivity() {
 
             // Add updated entry with URL type
             val urlType = detectUrlType(url)
-            newLinks.add("${video.name}###${video.url}###$urlType${if (!video.userAgent.isNullOrEmpty()) "###${video.userAgent}" else ""}")
+            val isLiveStream = urlType == "LIVE" || 
+                              urlType == "HLS" || 
+                              url.lowercase().contains("live") ||
+                              url.lowercase().contains("cricket") ||
+                              url.lowercase().contains("match") ||
+                              url.lowercase().contains("tv") ||
+                              url.lowercase().contains("tata") ||
+                              (url.lowercase().contains(".php") && url.lowercase().contains("?"))
+            
+            // Format: title###url###urlType###userAgent###isLiveStream
+            val channelData = buildString {
+                append("${video.name}###${video.url}###$urlType")
+                if (!video.userAgent.isNullOrEmpty()) {
+                    append("###${video.userAgent}")
+                } else {
+                    append("###")
+                }
+                append("###$isLiveStream")
+            }
+            
+            newLinks.add(channelData)
 
             // Save changes
             sharedPreferences.edit().apply {
