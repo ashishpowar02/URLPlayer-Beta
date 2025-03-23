@@ -34,6 +34,27 @@ copylefted libre software app, gratis
 - Multiple screen modes (Fit, Fill, Zoom)
 - Gesture controls for brightness and volume
 
+## Advanced Live Streaming Features
+
+### Real-Time Progress Updates
+- Ultra-smooth 60fps progress bar updates for live streams
+- Zero-delay scrubber movement for real-time tracking
+- Dynamic duration updates that follow the live edge
+- Intelligent position interpolation for smooth playback
+
+### Disney+ Hotstar Style Live Experience
+- Red "LIVE" indicator with pulsing animation at live edge
+- Dynamic time-behind-live display when not at live edge
+- One-touch "GO LIVE" button with visual feedback
+- Smooth animations and transitions for all live controls
+
+### Enhanced Live Stream Controls
+- Instant seeking with minimal delay
+- Automatic quality adaptation for live streams
+- Temporary speed boost when catching up to live
+- Visual feedback when reaching live edge
+- Optimized buffering for minimal latency
+
 ## Supported Formats
 
 ### Video Extensions
@@ -54,6 +75,7 @@ copylefted libre software app, gratis
 - RTP
 - MMS
 - SRT
+- DASH (Dynamic Adaptive Streaming over HTTP)
 
 ## Advanced Player Features
 
