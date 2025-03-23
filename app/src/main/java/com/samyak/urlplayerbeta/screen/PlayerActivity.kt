@@ -876,7 +876,9 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     url?.contains(".m3u", ignoreCase = true) == true ||
                     url?.contains("live", ignoreCase = true) == true ||
                     url?.contains("stream", ignoreCase = true) == true ||
-                    url?.contains(".php", ignoreCase = true) == true // PHP streams are typically live
+                    url?.contains(".php", ignoreCase = true) == true || // PHP streams are typically live
+                    url?.contains("tv", ignoreCase = true) == true ||
+                    url?.contains("tata", ignoreCase = true) == true
 
             // Create media source based on URL type
             val mediaItem = MediaItem.fromUri(url ?: return)
@@ -885,7 +887,9 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 url?.endsWith(".m3u8", ignoreCase = true) == true ||
                         url?.contains(".m3u8?", ignoreCase = true) == true ||  // Added support for query params
                         url?.endsWith(".m3u", ignoreCase = true) == true ||
-                        url?.endsWith(".hls", ignoreCase = true) == true -> {
+                        url?.endsWith(".hls", ignoreCase = true) == true ||
+                        (url?.contains(".php", ignoreCase = true) == true && 
+                         url?.contains("?", ignoreCase = true) == true) -> {  // PHP-based streams
                     isLiveStream = true
                     HlsMediaSource.Factory(dataSourceFactory)
                         .createMediaSource(mediaItem)
