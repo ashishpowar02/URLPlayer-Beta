@@ -307,7 +307,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
         // Set up edge-to-edge display with notch support
         setupEdgeToEdgeDisplay()
-        
+
         // Enable notch mode by default
         isNotchModeEnabled = true
 
@@ -346,7 +346,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        
+
         // Apply fullscreen mode by default
         playInFullscreen(enable = true)
     }
@@ -397,18 +397,18 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         }
 
         // Handle PHP-based stream URLs with query parameters
-        if (url?.contains(".php") == true && url?.contains("?") == true || 
+        if (url?.contains(".php") == true && url?.contains("?") == true ||
             url?.contains(".m3u8") == true && url?.contains("?") == true) {
             // Extract channel ID or name from URL parameters if available
             val channelParam = url?.substringAfter("?")?.split("&")
                 ?.find { it.startsWith("id=") || it.startsWith("c=") || it.startsWith("channel=") }
                 ?.substringAfter("=")
-            
+
             if (channelParam != null && intent.getStringExtra("CHANNEL_NAME") == null) {
                 val channelName = channelParam.replace("_", " ")
                     .replace("-", " ")
                     .capitalize(Locale.getDefault())
-                
+
                 intent.putExtra("CHANNEL_NAME", channelName)
             }
         }
@@ -463,7 +463,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             // Add cast button setup
             mediaRouteButton = playerView.findViewById(R.id.mediaRouteButton)
             CastButtonFactory.setUpMediaRouteButton(this, mediaRouteButton)
-            
+
             // Move PiP button to controller layout
             // This assumes you have a pipButton in your player control layout
             val pipButton = playerView.findViewById<ImageButton>(R.id.pipModeBtn)
@@ -553,7 +553,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 else R.drawable.lock_open_icon
             )
         }
-        
+
         // Add PiP button handler if it exists in the layout
         playerView.findViewById<ImageButton>(R.id.pipModeBtn)?.setOnClickListener {
             enterPictureInPictureMode()
@@ -631,7 +631,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
                     fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
                     currentScreenMode = ScreenMode.ZOOM
-                    
+
                     // Enable notch mode when in FILL mode
                     if (!isNotchModeEnabled) {
                         toggleNotchMode()
@@ -893,7 +893,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         "Connection" to "keep-alive"
                     ))
             }
-            
+
             // Create media source based on URL type
             val mediaItem = MediaItem.fromUri(url ?: return)
             val mediaSource = when {
@@ -904,8 +904,8 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         url?.contains("akamaized", ignoreCase = true) == true ||
                         url?.contains("hdntl=exp", ignoreCase = true) == true ||
                         url?.contains("hmac=", ignoreCase = true) == true ||
-                        (url?.contains(".php", ignoreCase = true) == true && 
-                         url?.contains("?", ignoreCase = true) == true) -> {
+                        (url?.contains(".php", ignoreCase = true) == true &&
+                                url?.contains("?", ignoreCase = true) == true) -> {
                     isLiveStream = true
                     if (isAkamaizedStream(url)) {
                         // Special handling for Akamaized streams
@@ -954,25 +954,24 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             if (isLiveStream) {
                 // Set controller timeout using the correct method
                 playerView.controllerShowTimeoutMs = 3500 // Show controls for 3.5 seconds
-                
+
                 // Set buffering display mode
                 playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
-                
+
                 // Set up progress updater for live streams
                 setupLiveProgressUpdater()
-                
+
                 // Configure time bar for live streams
                 configureLiveTimeBar()
-                
+
                 // Apply custom styling for live streams
                 customizeLiveStreamPlayer()
-                
-                // Add these new calls
-                handleLiveStreamSeeking()
-                addGoLiveButton()
-                
+
                 // Initialize live text updates
                 initializeLiveTextUpdates()
+                
+                // Add this new line - Enable automatic live edge following
+                enableAutomaticLiveEdgeFollowing()
             }
 
             // Add player listener
@@ -1021,15 +1020,15 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 override fun onPlayerError(error: PlaybackException) {
                     // Log the error for debugging
                     Log.e("PlayerActivity", "Player error: ${error.message}")
-                    
+
                     // Show error message
                     errorTextView.visibility = View.VISIBLE
                     progressBar.visibility = View.GONE
-                    
+
                     // Check if it's an authentication error
                     if (error.cause?.message?.contains("Input does not start with the #EXTM3U header") == true) {
                         errorTextView.text = "Authentication error or invalid stream URL. The stream may have expired."
-                        
+
                         // Show retry button if not already added
                         if (errorTextView.parent is ViewGroup) {
                             val container = errorTextView.parent as ViewGroup
@@ -1177,7 +1176,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             AudioManager.AUDIOFOCUS_GAIN
         )
         if (brightness != 0) setScreenBrightness(brightness)
-        
+
         // Auto-play after returning from ad if we were showing an ad
         if (isShowingAd) {
             isShowingAd = false
@@ -1187,16 +1186,16 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         } else if (isPlaying) {
             playVideo()
         }
-        
+
         if (::sessionManager.isInitialized) {
             sessionManager.addSessionManagerListener(castSessionManagerListener, CastSession::class.java)
         }
-        
+
         // If you're restoring repeat mode, use setRepeatMode
         val savedRepeatMode = getSharedPreferences("player_settings", Context.MODE_PRIVATE)
             .getInt("repeat_mode", Player.REPEAT_MODE_OFF)
         player.setRepeatMode(savedRepeatMode)
-        
+
         // Update repeat button icon based on current mode
         updateRepeatButtonIcon(player.repeatMode)
     }
@@ -1252,10 +1251,10 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             binding.lockButton.visibility = View.GONE
             binding.brightnessIcon.visibility = View.GONE
             binding.volumeIcon.visibility = View.GONE
-            
+
             // Disable controller completely to hide all UI elements
             playerView.useController = false
-            
+
             // Ensure video is playing when entering PiP
             if (isPlayerReady && !isPlaying) {
                 playVideo()
@@ -1267,10 +1266,10 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             // Show controls when exiting PiP mode
             binding.lockButton.visibility = View.VISIBLE
             playerView.useController = true
-            
+
             // Force controller to update
             playerView.showController()
-            
+
             // Restore previous screen mode and notch settings
             if (prePipScreenMode != currentScreenMode) {
                 // Apply the saved screen mode
@@ -1289,16 +1288,16 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     }
                 }
                 currentScreenMode = prePipScreenMode
-                
+
                 // Update fullscreen button icon
                 fullScreenButton.setImageResource(R.drawable.fullscreen_exit_icon)
             }
-            
+
             // Restore notch mode if needed
             if (prePipNotchEnabled != isNotchModeEnabled) {
                 toggleNotchMode()
             }
-            
+
             // Handle navigation based on pipStatus
             if (pipStatus != 0) {
                 finish()
@@ -1804,29 +1803,29 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
                 com.google.android.exoplayer2.ui.R.id.exo_progress
             )
-            
+
             // Set scrubbing enabled for live streams with DVR support
             timeBar?.isEnabled = true
-            
+
             // Set the live playback parameters
             player.setPlaybackParameters(PlaybackParameters(1.0f))
-            
+
             // Initialize the live stream start time
             liveStreamStartTime = System.currentTimeMillis() - 30000 // Start 30 seconds in the past
-            
+
             // Set initial duration for the progress bar (30 minutes buffer)
             liveStreamDuration = 30 * 60 * 1000
-            
+
             // Make the time bar more responsive for live streams
             timeBar?.apply {
                 // Set colors for live stream
                 setPlayedColor(Color.RED)
                 setScrubberColor(Color.RED)
                 setBufferedColor(Color.parseColor("#4DFFFFFF")) // Semi-transparent white
-                
+
                 // No size customization - just use defaults
             }
-            
+
             // Add a listener to track when we're at the live edge
             player.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -1836,14 +1835,14 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                             val isAtLiveEdge = player.contentPosition >= player.currentTimeline.getWindow(
                                 player.currentMediaItemIndex, Timeline.Window()
                             ).durationMs - 500 // Within 500ms of live edge
-                            
+
                             if (isAtLiveEdge) {
                                 // Update UI to show we're at live edge
                                 playerView.findViewById<TextView>(R.id.exo_live_text)?.apply {
                                     visibility = View.VISIBLE
                                     setTextColor(Color.RED)
                                     text = "LIVE"
-                                    
+
                                     // Add a small red dot before the text (Hotstar style)
                                     val dotDrawable = GradientDrawable().apply {
                                         shape = GradientDrawable.OVAL
@@ -1859,7 +1858,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         }
                     }
                 }
-                
+
                 override fun onPositionDiscontinuity(
                     oldPosition: Player.PositionInfo,
                     newPosition: Player.PositionInfo,
@@ -1873,13 +1872,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                             )
                             val duration = currentWindow.durationMs
                             val currentPosition = player.contentPosition
-                            
+
                             // Check if we're at live edge after seeking
                             val isAtLiveEdge = currentPosition >= duration - 500
-                            
+
                             // Update UI immediately
                             updateLiveEdgeIndicator(isAtLiveEdge)
-                            
+
                             // Update GO LIVE button visibility
                             val goLiveButton = playerView.findViewById<Button>(goLiveButtonId)
                             if (goLiveButton != null) {
@@ -1934,7 +1933,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         setPadding(40, 12, 40, 12) // Wider padding for better appearance
                         textSize = 14f
                         elevation = 6f // Increased elevation for better shadow effect
-                        
+
                         // Add a subtle stroke for better visibility
                         (background as GradientDrawable).setStroke(2, Color.parseColor("#FFCCCCCC"))
 
@@ -1952,7 +1951,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
                         // Add the button to the player view
                         (playerView as FrameLayout).addView(this)
-                        
+
                         // Set up click listener for immediate response
                         setOnClickListener {
                             // Hotstar-style animation
@@ -1963,21 +1962,21 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                             val scaleNormal = ObjectAnimator.ofFloat(it, "scaleX", 1.05f, 1f)
                             val scaleNormalY = ObjectAnimator.ofFloat(it, "scaleY", 1.05f, 1f)
                             val fadeOut = ObjectAnimator.ofFloat(it, "alpha", 1f, 0f)
-                            
+
                             val animSet = AnimatorSet()
-                            
+
                             // First do the press effect
                             val pressEffect = AnimatorSet()
                             pressEffect.playTogether(scaleDown, scaleDownY)
-                            
+
                             // Then do the release effect
                             val releaseEffect = AnimatorSet()
                             releaseEffect.playTogether(scaleUp, scaleUpY)
-                            
+
                             // Then normalize
                             val normalizeEffect = AnimatorSet()
                             normalizeEffect.playTogether(scaleNormal, scaleNormalY)
-                            
+
                             // Chain them together
                             animSet.playSequentially(pressEffect, releaseEffect, normalizeEffect, fadeOut)
                             animSet.duration = 200 // Even faster animation for immediate feedback
@@ -1993,7 +1992,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                 alpha = 0f
                             }
                             (playerView as FrameLayout).addView(flashView)
-                            
+
                             // Animate the flash
                             val flashIn = ObjectAnimator.ofFloat(flashView, "alpha", 0f, 0.3f)
                             val flashOut = ObjectAnimator.ofFloat(flashView, "alpha", 0.3f, 0f)
@@ -2015,7 +2014,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                             // Hotstar optimization: Temporarily increase playback speed to catch up
                             val originalSpeed = player.playbackParameters.speed
                             player.setPlaybackParameters(PlaybackParameters(2.0f)) // Even faster catch-up
-                            
+
                             // Seek to the live edge immediately
                             player.seekTo(currentWindow.durationMs)
                             player.play()
@@ -2043,7 +2042,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
                 // Start pulse animation for the button
                 startHotstarPulseAnimation(goLiveButton)
-                
+
             } catch (e: Exception) {
                 Log.e("PlayerActivity", "Error adding Go Live button: ${e.message}")
             }
@@ -2057,11 +2056,11 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             val currentWindow = player.currentTimeline.getWindow(
                 player.currentMediaItemIndex, Timeline.Window()
             )
-            
+
             // Get duration (live edge position)
             val duration = currentWindow.durationMs
             if (duration <= 0) return
-            
+
             // Get current position with real-time interpolation
             val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
             val currentPosition = if (player.isPlaying) {
@@ -2069,25 +2068,25 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             } else {
                 player.contentPosition
             }
-            
+
             // Calculate how far behind live we are
             val timeBehindLive = duration - currentPosition
-            
+
             // Update the last known live position
             lastLivePosition = duration
-            
+
             // Check if we're at live edge (within threshold)
             val wasAtLiveEdge = isAtLiveEdge
             isAtLiveEdge = timeBehindLive < 500 // 500ms threshold for minimal delay
-            
+
             // Find the GO LIVE button
             val goLiveButton = playerView.findViewById<Button>(goLiveButtonId) ?: return
-            
+
             // Update the live indicator text
             val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
             liveText?.apply {
                 visibility = View.VISIBLE
-                
+
                 // Update text based on how far behind we are
                 if (isAtLiveEdge) {
                     text = "LIVE"
@@ -2116,14 +2115,14 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
                 }
             }
-            
+
             // Handle GO LIVE button visibility with immediate response
             if (!isAtLiveEdge && timeBehindLive > 1000) { // 1 second threshold
                 // We're behind live, show the button immediately if it was hidden
                 if (goLiveButton.visibility != View.VISIBLE) {
                     goLiveButton.alpha = 0f
                     goLiveButton.visibility = View.VISIBLE
-                    
+
                     // Fade in animation - quick and responsive
                     goLiveButton.animate().alpha(1f).setDuration(150).start()
                 }
@@ -2135,15 +2134,15 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         .withEndAction { goLiveButton.visibility = View.GONE }.start()
                 }
             }
-            
+
             // If we just reached live edge, show a toast (Hotstar does this)
             if (!wasAtLiveEdge && isAtLiveEdge) {
                 showCustomToast("You're now watching live")
             }
-            
+
             // Update last position time for smooth interpolation
             lastPositionUpdateTime = System.currentTimeMillis()
-            
+
         } catch (e: Exception) {
             Log.e("PlayerActivity", "Error checking live position: ${e.message}")
         }
@@ -2161,51 +2160,51 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     setSize(dotSize, dotSize)
                 }
                 background = dotDrawable
-                
+
                 // Position the dot at the left of the button text
                 val params = FrameLayout.LayoutParams(dotSize, dotSize).apply {
                     gravity = Gravity.CENTER_VERTICAL or Gravity.START
                     leftMargin = 16
                 }
                 layoutParams = params
-                
+
                 // Add the dot to the button if it's a ViewGroup
                 if (view is ViewGroup) {
                     view.addView(this)
                 }
             }
-            
+
             // Create subtle pulse animation for the button
             val scaleX = ValueAnimator.ofFloat(1f, 1.05f, 1f)
             val scaleY = ValueAnimator.ofFloat(1f, 1.05f, 1f)
-            
+
             // Update the view's scale as the animation runs
             scaleX.addUpdateListener { animator ->
                 view.scaleX = animator.animatedValue as Float
             }
-            
+
             scaleY.addUpdateListener { animator ->
                 view.scaleY = animator.animatedValue as Float
             }
-            
+
             // Create animator set for the button
             val animatorSet = AnimatorSet()
             animatorSet.playTogether(scaleX, scaleY)
             animatorSet.duration = 2000 // 2 seconds per pulse
 //            animatorSet.repeatCount = ValueAnimator.INFINITE
 //            animatorSet.repeatMode = ValueAnimator.RESTART
-            
+
             // Create pulse animation for the dot
             val dotScaleX = ObjectAnimator.ofFloat(dotView, "scaleX", 1f, 1.5f, 1f)
             val dotScaleY = ObjectAnimator.ofFloat(dotView, "scaleY", 1f, 1.5f, 1f)
             val dotAlpha = ObjectAnimator.ofFloat(dotView, "alpha", 1f, 0.6f, 1f)
-            
+
             val dotAnimSet = AnimatorSet()
             dotAnimSet.playTogether(dotScaleX, dotScaleY, dotAlpha)
             dotAnimSet.duration = 1200
 //            dotAnimSet.repeatCount = ValueAnimator.INFINITE
 //            dotAnimSet.repeatMode = ValueAnimator.RESTART
-            
+
             // Start animations when view becomes visible
             view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
                 override fun onViewAttachedToWindow(v: View) {
@@ -2214,19 +2213,19 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         dotAnimSet.start()
                     }
                 }
-                
+
                 override fun onViewDetachedFromWindow(v: View) {
                     animatorSet.cancel()
                     dotAnimSet.cancel()
                 }
             })
-            
+
             // Also start animations if view is already visible
             if (view.visibility == View.VISIBLE && view.isAttachedToWindow) {
                 animatorSet.start()
                 dotAnimSet.start()
             }
-            
+
         } catch (e: Exception) {
             Log.e("PlayerActivity", "Error starting pulse animation: ${e.message}")
         }
@@ -2239,15 +2238,15 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             val layout = LayoutInflater.from(this).inflate(R.layout.custom_toast, null)
             val textView = layout.findViewById<TextView>(R.id.toast_text)
             textView.text = message
-            
+
             // Style the toast to match Hotstar (white text on semi-transparent black background)
             val background = layout.background as GradientDrawable
             background.setColor(Color.parseColor("#CC000000")) // Semi-transparent black
             background.cornerRadius = 25f // Rounded corners
-            
+
             textView.setTextColor(Color.WHITE)
             textView.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            
+
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                 // For older Android versions
                 val toast = Toast(applicationContext)
@@ -2260,20 +2259,20 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 // Use Snackbar instead which can be styled to look like Hotstar toast
                 val snackbar = Snackbar.make(binding.root, message, Snackbar.LENGTH_SHORT)
                 val snackbarView = snackbar.view
-                
+
                 // Style the Snackbar to look like Hotstar toast
                 snackbarView.setBackgroundColor(Color.parseColor("#CC000000"))
                 val params = snackbarView.layoutParams as FrameLayout.LayoutParams
                 params.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
                 params.bottomMargin = 150
                 snackbarView.layoutParams = params
-                
+
                 // Find the text view in the Snackbar and style it
                 val textView = snackbarView.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
                 textView.setTextColor(Color.WHITE)
                 textView.textAlignment = View.TEXT_ALIGNMENT_CENTER
                 textView.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                
+
                 snackbar.show()
             }
         } catch (e: Exception) {
@@ -2404,26 +2403,26 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     // Add this new method
     private fun showLanguageDialog() {
         val languages = LanguageManager.getSupportedLanguages()
-        
+
         // Get current language code
         val currentLang = LanguageManager.getCurrentLanguage(this)
-        
+
         // Find current selection index
         val currentIndex = languages.indexOfFirst { it.second == currentLang }.coerceAtLeast(0)
-        
+
         // Create items array
         val items = languages.map { it.first }.toTypedArray()
-        
+
         val dialog = MaterialAlertDialogBuilder(this, R.style.AlertDialogCustom)
             .setTitle(getString(R.string.select_language))
             .setSingleChoiceItems(items, currentIndex) { dialog, which ->
                 val (_, langCode) = languages[which]
-                
+
                 // Use language manager to set language
                 LanguageManager.setLanguage(this, langCode)
-                
+
                 dialog.dismiss()
-                
+
                 // Show confirmation
                 Toast.makeText(this, getString(R.string.language_changed), Toast.LENGTH_SHORT).show()
             }
@@ -2433,26 +2432,26 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             }
             .setBackground(ColorDrawable(0x803700B3.toInt()))
             .create()
-        
+
         // Apply styling
         dialog.setOnShowListener { dialogInterface ->
             val alertDialog = dialogInterface as AlertDialog
-            
+
             // Set title color
             val titleId = resources.getIdentifier("alertTitle", "id", "android")
             alertDialog.findViewById<TextView>(titleId)?.setTextColor(Color.WHITE)
-            
+
             // Set list item colors
             alertDialog.listView?.apply {
                 setSelector(R.drawable.dialog_item_selector)
                 divider = ColorDrawable(Color.WHITE)
                 dividerHeight = 1
             }
-            
+
             // Set button colors
             alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.WHITE)
         }
-        
+
         dialog.show()
     }
 
@@ -2474,13 +2473,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         val label = format.label ?: Locale(language).displayLanguage
                         val channels = format.channelCount
                         val bitrate = format.bitrate / 1000 // Convert to kbps
-                        
+
                         audioTracks.add(language)
                         audioTracksList.add(
                             "${audioTracksList.size + 1}. $label" +
-                            if (language != "unknown") " (${Locale(language).displayLanguage})" else "" +
-                            if (channels > 0) " - ${channels}ch" else "" +
-                            if (bitrate > 0) " - ${bitrate}kbps" else ""
+                                    if (language != "unknown") " (${Locale(language).displayLanguage})" else "" +
+                                            if (channels > 0) " - ${channels}ch" else "" +
+                                                    if (bitrate > 0) " - ${bitrate}kbps" else ""
                         )
                     }
                 }
@@ -2522,18 +2521,18 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 .apply {
                     setOnShowListener { dialogInterface ->
                         val alertDialog = dialogInterface as AlertDialog
-                        
+
                         // Set title color
                         val titleId = resources.getIdentifier("alertTitle", "id", "android")
                         alertDialog.findViewById<TextView>(titleId)?.setTextColor(Color.WHITE)
-                        
+
                         // Set list item colors
                         alertDialog.listView?.apply {
                             setSelector(R.drawable.dialog_item_selector)
                             divider = ColorDrawable(Color.WHITE)
                             dividerHeight = 1
                         }
-                        
+
                         // Set button colors
                         alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(Color.WHITE)
                     }
@@ -2550,7 +2549,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
             com.google.android.exoplayer2.ui.R.id.exo_progress
         )
-        
+
         // Add a listener to detect when user seeks in a live stream
         timeBar?.addListener(object : TimeBar.OnScrubListener {
             override fun onScrubStart(timeBar: TimeBar, position: Long) {
@@ -2565,7 +2564,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     player.currentMediaItemIndex, Timeline.Window()
                 )
                 val duration = currentWindow.durationMs
-                
+
                 if (duration > 0) {
                     val timeBehindLive = duration - position
                     // Update UI to show how far behind live we are
@@ -2578,13 +2577,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 if (wasPlayingBeforePause && !canceled) {
                     player.play()
                 }
-                
+
                 // Check if we're at live edge
                 val currentWindow = player.currentTimeline.getWindow(
                     player.currentMediaItemIndex, Timeline.Window()
                 )
                 val duration = currentWindow.durationMs
-                
+
                 if (duration > 0) {
                     val isAtLiveEdge = position >= duration - 5000
                     updateLiveEdgeIndicator(isAtLiveEdge)
@@ -2592,18 +2591,18 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             }
         })
     }
-    
+
     // Helper method to update time behind live indicator
     private fun updateTimeBehindLiveIndicator(timeBehindLive: Long) {
         // Find your time behind live indicator view
         val timeBehindLiveText = playerView.findViewById<TextView>(R.id.exo_live_text)
-        
+
         if (timeBehindLiveText != null) {
             if (timeBehindLive > 5000) {
                 // More than 5 seconds behind live
                 val seconds = timeBehindLive / 1000
                 val minutes = seconds / 60
-                
+
                 if (minutes > 0) {
                     timeBehindLiveText.text = "-${minutes}m ${seconds % 60}s"
                 } else {
@@ -2617,18 +2616,18 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             }
         }
     }
-    
+
     // Helper method to update live edge indicator
     private fun updateLiveEdgeIndicator(isAtLiveEdge: Boolean) {
         val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
-        
+
         liveText?.apply {
             visibility = View.VISIBLE
             text = if (isAtLiveEdge) "LIVE" else "LIVE"
             setTextColor(if (isAtLiveEdge) Color.RED else Color.WHITE)
         }
     }
-    
+
 
     // Helper method to update GO LIVE button visibility
     private fun updateGoLiveButtonVisibility(goLiveButton: Button) {
@@ -2639,10 +2638,10 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             val duration = currentWindow.durationMs
             val currentPosition = player.contentPosition
             val isAtLiveEdge = currentPosition >= duration - 5000
-            
+
             // Only show the button when not at live edge
             goLiveButton.visibility = if (isAtLiveEdge) View.GONE else View.VISIBLE
-            
+
             // Update the live indicator text
             val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
             liveText?.apply {
@@ -2660,11 +2659,11 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         try {
             val scaleX = ObjectAnimator.ofFloat(view, "scaleX", 1f, 1.1f, 1f)
             val scaleY = ObjectAnimator.ofFloat(view, "scaleY", 1f, 1.1f, 1f)
-            
+
             val animatorSet = AnimatorSet()
             animatorSet.playTogether(scaleX, scaleY)
             animatorSet.duration = 1500
-            
+
             // Use a listener to repeat the animation
             animatorSet.addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: android.animation.Animator) {
@@ -2673,7 +2672,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     }
                 }
             })
-            
+
             animatorSet.start()
         } catch (e: Exception) {
             Log.e("PlayerActivity", "Error in pulse animation: ${e.message}")
@@ -2698,13 +2697,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 // Save current state before entering PiP
                 prePipScreenMode = currentScreenMode
                 prePipNotchEnabled = isNotchModeEnabled
-                
+
                 // Hide controls immediately before entering PiP
                 binding.playerView.hideController()
                 binding.lockButton.visibility = View.GONE
                 binding.brightnessIcon.visibility = View.GONE
                 binding.volumeIcon.visibility = View.GONE
-                
+
                 // Enter PiP mode
                 try {
                     // Create PiP params with aspect ratio based on video dimensions
@@ -2719,10 +2718,10 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         .build()
 
                     super.enterPictureInPictureMode(params)
-                    
+
                     // Set flag to prevent ads when PiP is requested
                     isPipRequested = true
-                    
+
                     // Ensure video is playing
                     playVideo()
                 } catch (e: Exception) {
@@ -2750,26 +2749,26 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 val currentWindow = player.currentTimeline.getWindow(
                     player.currentMediaItemIndex, Timeline.Window()
                 )
-                
+
                 // For minimal delay, use a higher speed to catch up instantly
                 player.setPlaybackParameters(PlaybackParameters(2.0f))
-                
+
                 // Seek to the live edge immediately
                 player.seekTo(currentWindow.durationMs)
                 player.play()
-                
+
                 // Reset playback speed after a very short delay
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     player.setPlaybackParameters(PlaybackParameters(1.0f))
                 }, 300) // Very short delay
-                
+
                 // Update state immediately
                 isAtLiveEdge = true
                 lastLivePosition = currentWindow.durationMs
-                
+
                 // Hide button immediately without animation
                 goLiveButton.visibility = View.GONE
-                
+
             } catch (e: Exception) {
                 Log.e("PlayerActivity", "Error seeking to live: ${e.message}")
             }
@@ -2782,7 +2781,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         val hours = totalSeconds / 3600
         val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60
-        
+
         return if (hours > 0) {
             String.format("%02d:%02d:%02d", hours, minutes, seconds)
         } else {
@@ -2800,10 +2799,10 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     visibility = View.VISIBLE
                     text = "LIVE"
                     setTextColor(Color.RED)
-                    
+
                     // Make it more prominent
                     setTypeface(typeface, Typeface.BOLD)
-                    
+
                     // Add a red dot indicator before the text
                     val drawable = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
@@ -2813,7 +2812,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     setCompoundDrawablesWithIntrinsicBounds(drawable, null, null, null)
                     compoundDrawablePadding = 8
                 }
-                
+
                 // Customize time bar for live streams
                 val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
                     com.google.android.exoplayer2.ui.R.id.exo_progress
@@ -2822,25 +2821,22 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     // Make sure it's visible and enabled
                     visibility = View.VISIBLE
                     isEnabled = true
-                    
+
                     // Set colors for live stream
                     setPlayedColor(Color.RED)
                     setScrubberColor(Color.RED)
                     setBufferedColor(Color.parseColor("#4DFFFFFF")) // Semi-transparent white
                 }
-                
+
                 // Enable time shift for live streams
                 if (liveStreamTimeShiftEnabled) {
                     player.seekBack()
                     player.play()
                 }
-                
-                // Make sure the GO LIVE button is properly initialized
-                if (playerView.findViewById<Button>(goLiveButtonId) == null) {
-                    // This will create the GO LIVE button if it doesn't exist
-                    addGoLiveButton()
-                }
-                
+
+                // We don't need GO LIVE button for automatic live streaming
+                // So we don't call addGoLiveButton()
+
             } catch (e: Exception) {
                 Log.e("PlayerActivity", "Error customizing live player: ${e.message}")
             }
@@ -2860,10 +2856,10 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     // Optimized position and duration text updates for live streaming
     private fun setupLiveTextUpdater() {
         if (!isLiveStream) return
-        
+
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
         val updateInterval = 33L // 30fps updates for ultra-smooth text changes
-        
+
         val runnable = object : Runnable {
             override fun run() {
                 if (isLiveStream && isPlayerReady && !isInPictureInPictureMode) {
@@ -2871,14 +2867,14 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         // Get references to text views
                         val positionText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_position)
                         val durationText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_duration)
-                        
+
                         // Get current window and position info
                         val currentWindow = player.currentTimeline.getWindow(
                             player.currentMediaItemIndex, Timeline.Window()
                         )
                         val currentPosition = player.contentPosition
                         var duration = currentWindow.durationMs
-                        
+
                         // For live streams, we need to continuously update the duration
                         if (duration > 0) {
                             // Store the last known duration if it's larger than what we have
@@ -2895,13 +2891,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                 }
                             }
                             lastLiveUpdateTime = System.currentTimeMillis()
-                            
+
                             // Calculate how far behind live we are
                             val timeBehindLive = duration - currentPosition
-                            
+
                             // Check if we're at live edge
                             val isAtLiveEdge = timeBehindLive < 1000 // 1 second threshold
-                            
+
                             // Update position text with zero delay
                             positionText?.apply {
                                 if (isAtLiveEdge) {
@@ -2922,13 +2918,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                     setTextColor(Color.WHITE)
                                 }
                             }
-                            
+
                             // Update duration text
                             durationText?.apply {
                                 // For live streams, always show the current duration
                                 text = formatDuration(duration)
                             }
-                            
+
                             // Update last position time for smooth interpolation
                             lastPositionUpdateTime = System.currentTimeMillis()
                         }
@@ -2936,14 +2932,14 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         Log.e("PlayerActivity", "Error updating live text: ${e.message}")
                     }
                 }
-                
+
                 // Schedule next update at display refresh rate
                 if (isPlayerReady && !isDestroyed) {
                     handler.postDelayed(this, updateInterval)
                 }
             }
         }
-        
+
         // Start the updater immediately
         handler.post(runnable)
     }
@@ -2953,17 +2949,17 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         if (isLiveStream) {
             // Set up the text updater
             setupLiveTextUpdater()
-            
+
             // Also customize the text views
             val positionText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_position)
             val durationText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_duration)
-            
+
             // Make position text more prominent when at live edge
             positionText?.apply {
                 setTypeface(Typeface.DEFAULT_BOLD)
                 setTextSize(14f)
             }
-            
+
             // Make duration text slightly smaller
             durationText?.apply {
                 setTextSize(14f)
@@ -2978,11 +2974,11 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             if (::player.isInitialized) {
                 player.release()
             }
-            
+
             // Hide error view
             errorTextView.visibility = View.GONE
             progressBar.visibility = View.VISIBLE
-            
+
             // Create enhanced data source factory with browser-like headers
             val enhancedDataSourceFactory = DefaultHttpDataSource.Factory()
                 .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
@@ -3001,31 +2997,31 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     "Pragma" to "no-cache",
                     "Cache-Control" to "no-cache"
                 ))
-            
+
             // Create new player
             trackSelector = DefaultTrackSelector(this).apply {
                 setParameters(buildUponParameters().setMaxVideoSizeSd())
             }
-            
+
             player = ExoPlayer.Builder(this)
                 .setTrackSelector(trackSelector)
                 .build()
-            
+
             playerView.player = player
-            
+
             // Create media source with enhanced factory
             val mediaItem = MediaItem.fromUri(url ?: return)
             val mediaSource = HlsMediaSource.Factory(enhancedDataSourceFactory)
                 .createMediaSource(mediaItem)
-            
+
             player.setMediaSource(mediaSource)
             player.seekTo(playbackPosition)
             player.playWhenReady = true
             player.prepare()
-            
+
             // Re-add player listeners
             setupPlayerListeners()
-            
+
         } catch (e: Exception) {
             Log.e("PlayerActivity", "Error retrying with browser headers: ${e.message}")
             errorTextView.visibility = View.VISIBLE
@@ -3044,24 +3040,24 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     // Add this method to check if URL is an Akamaized stream
     private fun isAkamaizedStream(url: String?): Boolean {
         return url?.contains("akamaized", ignoreCase = true) == true &&
-               (url.contains("hdntl=exp", ignoreCase = true) || 
-                url.contains("hmac=", ignoreCase = true))
+                (url.contains("hdntl=exp", ignoreCase = true) ||
+                        url.contains("hmac=", ignoreCase = true))
     }
 
     // Enhanced Disney+ Hotstar cricket live streaming implementation
     private fun setupLiveProgressUpdater() {
         if (!isLiveStream) return
-        
+
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
         val updateInterval = 16L // Update at ~60fps for ultra-smooth updates
-        
+
         val runnable = object : Runnable {
             override fun run() {
                 if (isLiveStream && isPlayerReady && !isInPictureInPictureMode) {
                     try {
                         // Force immediate UI update
                         playerView.invalidate()
-                        
+
                         // Get references to UI elements
                         val timeBar = playerView.findViewById<com.google.android.exoplayer2.ui.DefaultTimeBar>(
                             com.google.android.exoplayer2.ui.R.id.exo_progress
@@ -3069,14 +3065,14 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
                         val positionText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_position)
                         val durationText = playerView.findViewById<TextView>(com.google.android.exoplayer2.ui.R.id.exo_duration)
-                        
+
                         // Get current window and position info
                         val currentWindow = player.currentTimeline.getWindow(
                             player.currentMediaItemIndex, Timeline.Window()
                         )
                         val currentPosition = player.contentPosition
                         var duration = currentWindow.durationMs
-                        
+
                         // For live streams with minimal delay, we need to be more aggressive
                         // with real-time updates
                         if (duration > 0) {
@@ -3094,23 +3090,23 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                 }
                             }
                             lastLiveUpdateTime = System.currentTimeMillis()
-                            
+
                             // Calculate how far behind live we are
                             val timeBehindLive = duration - currentPosition
-                            
+
                             // Tighter threshold for live edge (500ms)
                             val isAtLiveEdge = timeBehindLive < 500 // 500ms threshold for minimal delay
-                            
+
                             // Update live indicator text
                             liveText?.apply {
                                 visibility = View.VISIBLE
-                                
+
                                 if (isAtLiveEdge) {
                                     // At live edge - show red LIVE indicator
                                     text = "LIVE"
                                     setTextColor(Color.RED)
                                     setTypeface(typeface, Typeface.BOLD)
-                                    
+
                                     // Add red dot for live indicator
                                     val dotDrawable = GradientDrawable().apply {
                                         shape = GradientDrawable.OVAL
@@ -3119,7 +3115,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                     }
                                     setCompoundDrawablesWithIntrinsicBounds(dotDrawable, null, null, null)
                                     compoundDrawablePadding = 8
-                                    
+
                                     // Add subtle pulsing animation for the LIVE text when at edge
                                     if (!isLiveTextAnimating) {
                                         isLiveTextAnimating = true
@@ -3155,21 +3151,21 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                     setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
                                 }
                             }
-                            
+
                             // Update time bar for live streams with minimal delay
                             timeBar?.apply {
                                 // Make sure time bar is visible and enabled
                                 visibility = View.VISIBLE
                                 isEnabled = true
-                                
+
                                 // Set colors based on live status
                                 setPlayedColor(if (isAtLiveEdge) Color.RED else Color.parseColor("#FFCC0000"))
                                 setScrubberColor(if (isAtLiveEdge) Color.RED else Color.WHITE)
                                 setBufferedColor(Color.parseColor("#40FFFFFF"))
-                                
+
                                 // For minimal delay, directly set position and duration
                                 setDuration(duration)
-                                
+
                                 // If playing, calculate a smoothly interpolated position
                                 if (player.isPlaying) {
                                     val interpolatedPosition = if (isAtLiveEdge) {
@@ -3184,11 +3180,11 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                 } else {
                                     setPosition(currentPosition)
                                 }
-                                
+
                                 // Update buffered position
                                 setBufferedPosition(player.bufferedPosition)
                             }
-                            
+
                             // Update position text with minimal delay
                             positionText?.apply {
                                 if (isAtLiveEdge) {
@@ -3208,12 +3204,12 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                     setTextColor(Color.WHITE)
                                 }
                             }
-                            
+
                             // Update duration text
                             durationText?.apply {
                                 text = formatDuration(duration)
                             }
-                            
+
                             // Update GO LIVE button visibility - show immediately when behind
                             val goLiveButton = playerView.findViewById<Button>(goLiveButtonId)
                             if (goLiveButton != null) {
@@ -3233,7 +3229,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                     }
                                 }
                             }
-                            
+
                             // Update last position time for smooth interpolation
                             lastPositionUpdateTime = System.currentTimeMillis()
                         }
@@ -3241,15 +3237,122 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         Log.e("PlayerActivity", "Error updating live progress: ${e.message}")
                     }
                 }
-                
+
                 // Schedule next update - very frequent for minimal delay
                 if (isPlayerReady && !isDestroyed) {
                     handler.postDelayed(this, updateInterval)
                 }
             }
         }
-        
+
         // Start the updater immediately
         handler.post(runnable)
+    }
+
+    // Add this new method to enable automatic live edge following
+    private fun enableAutomaticLiveEdgeFollowing() {
+        if (!isLiveStream) return
+        
+        try {
+            // Set up a periodic check to ensure we stay at live edge
+            val handler = android.os.Handler(android.os.Looper.getMainLooper())
+            val checkInterval = 5000L // Check every 5 seconds
+            
+            val liveEdgeChecker = object : Runnable {
+                override fun run() {
+                    if (isLiveStream && isPlayerReady && player.isPlaying) {
+                        try {
+                            // Get current window and position info
+                            val currentWindow = player.currentTimeline.getWindow(
+                                player.currentMediaItemIndex, Timeline.Window()
+                            )
+                            val duration = currentWindow.durationMs
+                            val currentPosition = player.contentPosition
+                            
+                            // Calculate how far behind live we are
+                            val timeBehindLive = duration - currentPosition
+                            
+                            // If we're more than 3 seconds behind live, catch up
+                            // This is the key Disney+ Hotstar behavior - automatically catch up
+                            if (timeBehindLive > 3000) {
+                                Log.d("LiveStream", "Auto-catching up to live edge. Behind by: ${timeBehindLive}ms")
+                                
+                                // For a smoother experience, use increased playback speed to catch up
+                                // rather than an abrupt seek
+                                if (timeBehindLive < 10000) { // Less than 10 seconds behind
+                                    // Use faster playback to catch up gradually
+                                    player.setPlaybackParameters(PlaybackParameters(1.5f))
+                                    
+                                    // Schedule return to normal speed once we're close to live
+                                    handler.postDelayed({
+                                        if (player.isPlaying) {
+                                            player.setPlaybackParameters(PlaybackParameters(1.0f))
+                                        }
+                                    }, 2000) // Check again in 2 seconds
+                                } else {
+                                    // If we're way behind (>10 seconds), just seek to live
+                                    player.seekTo(duration - 500) // Seek to 500ms before live edge
+                                    player.setPlaybackParameters(PlaybackParameters(1.0f))
+                                }
+                                
+                                // Update UI to show we're catching up
+                                val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
+                                liveText?.apply {
+                                    text = "CATCHING UP..."
+                                    setTextColor(Color.YELLOW)
+                                    
+                                    // Reset to normal after a short delay
+                                    handler.postDelayed({
+                                        text = "LIVE"
+                                        setTextColor(Color.RED)
+                                    }, 1500)
+                                }
+                            } else {
+                                // We're at or near live edge, ensure normal playback speed
+                                if (player.playbackParameters.speed != 1.0f) {
+                                    player.setPlaybackParameters(PlaybackParameters(1.0f))
+                                }
+                                
+                                // Update live indicator
+                                updateLiveEdgeIndicator(true)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("LiveStream", "Error in live edge checker: ${e.message}")
+                        }
+                    }
+                    
+                    // Schedule next check if player is still active
+                    if (isPlayerReady && !isDestroyed) {
+                        handler.postDelayed(this, checkInterval)
+                    }
+                }
+            }
+            
+            // Start the live edge checker
+            handler.post(liveEdgeChecker)
+            
+            // Also add a listener to handle user-initiated seeking
+            player.addListener(object : Player.Listener {
+                override fun onPositionDiscontinuity(
+                    oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo,
+                    reason: Int
+                ) {
+                    // When user manually seeks, temporarily disable auto-catch up
+                    if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                        // Cancel any pending catch-up operations
+                        handler.removeCallbacksAndMessages(null)
+                        
+                        // Reset playback speed to normal
+                        player.setPlaybackParameters(PlaybackParameters(1.0f))
+                        
+                        // Schedule a check after a delay to allow user to watch the sought position
+                        handler.postDelayed(liveEdgeChecker, 30000) // Wait 30 seconds before auto-catching up
+                    }
+                }
+            })
+        } catch (e: Exception) {
+            Log.e("LiveStream", "Error setting up automatic live edge following: ${e.message}")
+        }
     }
 }
