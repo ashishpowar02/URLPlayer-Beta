@@ -1729,6 +1729,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 null                             // Default typeface
             )
 
+
             // Apply style to player view
             playerView.subtitleView?.setStyle(style)
 
