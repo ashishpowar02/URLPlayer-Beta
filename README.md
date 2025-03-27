@@ -10,6 +10,10 @@
 ![Beta Version](https://img.shields.io/badge/status-beta-ff69b4.svg) 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
+## 📌 Status Notice
+> **Warning**  
+> This is **beta software** (v0.9.0). Not recommended for production use.
+
 
 URL Player Beta is an Android application that allows users to play online videos from various streaming sources. The app supports multiple video formats and streaming protocols.
 
