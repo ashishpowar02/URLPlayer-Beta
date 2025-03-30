@@ -9,7 +9,7 @@
 
 ![Beta Version](https://img.shields.io/badge/status-beta-ff69b4.svg) 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-[![Stable Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)](https://github.com/samyak2403/URLPlayer-Stable-Version)
+
 
 ## 📌 Status Notice
 > **Warning**  
@@ -180,6 +180,12 @@ copylefted libre software app, gratis
     
 # URL Player Beta - Publishing On Play Store Guide -> 
 <p align=""><a href="https://github.com/samyak2403/URLPlayer-Beta/blob/master/PublishingGuide.md"><img src="image/playstore.png" alt="playstore" height="60px"></a></p>
+
+## Stable Version
+[![Stable Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)](https://github.com/samyak2403/URLPlayer-Stable-Version)
+**Latest Stable Release:**  
+[![Release](https://img.shields.io/badge/Click_Here-URL_Player-FF6F00.svg)](https://github.com/samyak2403/URLPlayer-Stable-Version)
+
 
 
 ## Installation
