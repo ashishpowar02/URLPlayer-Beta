@@ -182,8 +182,11 @@ copylefted libre software app, gratis
 <p align=""><a href="https://github.com/samyak2403/URLPlayer-Beta/blob/master/PublishingGuide.md"><img src="image/playstore.png" alt="playstore" height="60px"></a></p>
 
 ## Stable Version
+
 [![Stable Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)](https://github.com/samyak2403/URLPlayer-Stable-Version)
+
 **Latest Stable Release:**  
+
 [![Release](https://img.shields.io/badge/Click_Here-URL_Player-FF6F00.svg)](https://github.com/samyak2403/URLPlayer-Stable-Version)
 
 
