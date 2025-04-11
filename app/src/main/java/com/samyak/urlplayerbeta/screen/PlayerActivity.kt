@@ -1308,6 +1308,16 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     3 -> intent.putExtra("class", "AllVideos")
                 }
                 startActivity(intent)
+            } else {
+                // Fix for Android 14: When PiP is closed (not navigating elsewhere),
+                // we need to release the player to stop audio playback
+                if (Build.VERSION.SDK_INT >= 34) { // Android 14 (UPSIDE_DOWN_CAKE)
+                    pauseVideo()
+                    player.stop()
+                    player.clearMediaItems()
+                    player.release()
+                    finish() // Close the activity
+                }
             }
         }
     }
@@ -1341,6 +1351,14 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 // Hide controls when entering PiP
                 binding.playerView.hideController()
                 binding.lockButton.visibility = View.GONE
+                binding.brightnessIcon.visibility = View.GONE
+                binding.volumeIcon.visibility = View.GONE
+
+                // Set flag to prevent ads when PiP is requested
+                isPipRequested = true
+
+                // Ensure video is playing
+                playVideo()
             } catch (e: Exception) {
                 Log.e("PlayerActivity", "Failed to enter PiP mode: ${e.message}")
                 isPipRequested = false
