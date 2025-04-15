@@ -1224,14 +1224,11 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
     override fun onDestroy() {
         super.onDestroy()
-        player.release()
-        audioManager?.abandonAudioFocus(null)
+        // Use the comprehensive cleanup method for onDestroy
         try {
-            if (::loudnessEnhancer.isInitialized) {
-                loudnessEnhancer.release()
-            }
+            releasePlayerResources()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("PlayerActivity", "Error in onDestroy: ${e.message}")
         }
     }
 
@@ -1258,6 +1255,12 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             // Ensure video is playing when entering PiP
             if (isPlayerReady && !isPlaying) {
                 playVideo()
+            }
+            
+            // Register a PiP close observer for Android 14+ that will handle cleanup
+            // if the PiP window is closed without proper lifecycle callbacks
+            if (Build.VERSION.SDK_INT >= 34) { // Android 14, 15, 16+
+                registerPipCloseHandler()
             }
         } else {
             // Reset PiP flag when exiting PiP mode
@@ -1303,21 +1306,117 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 finish()
                 val intent = Intent(this, PlayerActivity::class.java)
                 when (pipStatus) {
-                    1 -> intent.putExtra("class", "FolderActivity")
+                    1 -> intent.putExtra("class", "MainActivity")
                     2 -> intent.putExtra("class", "SearchedVideos")
                     3 -> intent.putExtra("class", "AllVideos")
                 }
                 startActivity(intent)
             } else {
-                // Fix for Android 14: When PiP is closed (not navigating elsewhere),
+                // Fix for Android 14+: When PiP is closed (not navigating elsewhere),
                 // we need to release the player to stop audio playback
-                if (Build.VERSION.SDK_INT >= 34) { // Android 14 (UPSIDE_DOWN_CAKE)
-                    pauseVideo()
-                    player.stop()
-                    player.clearMediaItems()
-                    player.release()
-                    finish() // Close the activity
+                if (Build.VERSION.SDK_INT >= 34) { // Android 14 (UPSIDE_DOWN_CAKE) and above
+                    try {
+                        // Ensure we stop all playback first
+                        if (isPlaying) {
+                            pauseVideo()
+                        }
+                        
+                        // Completely release all player resources
+                        releasePlayerResources()
+                        
+                        // Close the activity to ensure full cleanup
+                        finish()
+                    } catch (e: Exception) {
+                        Log.e("PlayerActivity", "Error cleaning up player on PiP close: ${e.message}")
+                        // Force finish as last resort
+                        finish()
+                    }
                 }
+            }
+        }
+    }
+    
+    // Add this new method to properly release all player resources
+    private fun releasePlayerResources() {
+        try {
+            // Stop and clear the player
+            player.stop()
+            player.clearMediaItems()
+            
+            // Release audio focus
+            audioManager?.abandonAudioFocus(null)
+            
+            // Release the loudness enhancer if initialized
+            try {
+                if (::loudnessEnhancer.isInitialized) {
+                    loudnessEnhancer.enabled = false
+                    loudnessEnhancer.release()
+                }
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Error releasing loudness enhancer: ${e.message}")
+            }
+            
+            // Finally release the player
+            player.release()
+            
+            // Mark player as not ready to prevent further usage
+            isPlayerReady = false
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error releasing player resources: ${e.message}")
+        }
+    }
+    
+    // Add this new method to register a PiP close handler for Android 14+
+    private fun registerPipCloseHandler() {
+        if (Build.VERSION.SDK_INT >= 34) { // Android 14+
+            try {
+                // Use window manager to detect when PiP window is closed
+                val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                
+                // Create a special view to monitor PiP state
+                val monitorView = View(this).apply {
+                    // We don't display this view, it's just for monitoring
+                    visibility = View.GONE
+                }
+                
+                // Add an attach state change listener
+                monitorView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: View) {
+                        // Not needed
+                    }
+                    
+                    override fun onViewDetachedFromWindow(v: View) {
+                        // This might be called when PiP window is closed abruptly
+                        if (isInPictureInPictureMode) {
+                            // If we're still technically in PiP mode but the view is detached,
+                            // it's likely the PiP window was closed by the user
+                            try {
+                                // Ensure playback is stopped
+                                pauseVideo()
+                                // Release resources
+                                releasePlayerResources()
+                                // Finish activity
+                                finish()
+                            } catch (e: Exception) {
+                                Log.e("PlayerActivity", "Error in PiP close handler: ${e.message}")
+                            }
+                        }
+                    }
+                })
+                
+                // Add a layout param observer
+                val params = WindowManager.LayoutParams().apply {
+                    width = 1
+                    height = 1
+                    flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    type = WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG
+                }
+                
+                // Add the monitor view to window manager
+                windowManager.addView(monitorView, params)
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Failed to register PiP close handler: ${e.message}")
             }
         }
     }
