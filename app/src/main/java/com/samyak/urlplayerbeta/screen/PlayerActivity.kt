@@ -19,7 +19,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MotionEvent
-import android.view.View
+import android.view.View as AndroidView
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ImageButton
@@ -83,9 +83,23 @@ import com.google.android.exoplayer2.ui.TimeBar
 import android.widget.Button
 import com.google.android.exoplayer2.PlaybackParameters
 import com.google.android.exoplayer2.Timeline
+import androidx.annotation.RequiresApi
+import android.content.ComponentName
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
+import android.graphics.Rect
+import android.app.RemoteAction
+import android.graphics.drawable.Icon
+import android.os.Handler
+import android.os.Looper
+import android.view.View
+import com.samyak.urlplayerbeta.utils.PipHelper
+import android.content.pm.PackageManager
+import android.app.PendingIntent
 
 
 class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
+    private val TAG = "PlayerActivity"
     private lateinit var binding: ActivityPlayerBinding
     private lateinit var player: ExoPlayer
     private lateinit var playerView: PlayerView
@@ -226,7 +240,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     private var liveStreamDuration = 30 * 60 * 1000L // 30 minutes buffer by default
 
     // Add this property at the top of your class
-    private var goLiveButtonId = View.NO_ID
+    private var goLiveButtonId = AndroidView.NO_ID
 
     // Add these properties at the top of your class
     private var behindLiveThreshold = 10000L // 10 seconds threshold to show GO LIVE button
@@ -296,9 +310,32 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     // Add this property to track current screen mode
     private var currentScreenMode = ScreenMode.FILL
 
+    // Inside the PlayerActivity class, add/update these properties
+    private var pipActionsReceiver: BroadcastReceiver? = null
+    private val PIP_CONTROL_TYPE_PLAY = 1
+    private val PIP_CONTROL_TYPE_PAUSE = 2
+    private val PIP_ACTION_PLAY = "play_action"
+    private val PIP_ACTION_PAUSE = "pause_action"
+    // Add these missing constants
+    private val REQUEST_CODE_PLAY = 100
+    private val REQUEST_CODE_PAUSE = 101
+    private val ACTION_PLAY = "com.samyak.urlplayerbeta.ACTION_PLAY"
+    private val ACTION_PAUSE = "com.samyak.urlplayerbeta.ACTION_PAUSE"
+    private var isPipModeSupported = false
+
+    // Inside the PlayerActivity class, add this property
+    private lateinit var pipHelper: PipHelper
+
     @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Check PiP support
+        isPipModeSupported = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        } else false
+        
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -349,6 +386,9 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
         // Apply fullscreen mode by default
         playInFullscreen(enable = true)
+
+        // Initialize PipHelper
+        pipHelper = PipHelper(this)
     }
 
     private fun handleIntent(intent: Intent) {
@@ -591,6 +631,9 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             Toast.makeText(this, "Error playing video: ${e.message}", Toast.LENGTH_SHORT).show()
             e.printStackTrace()
         }
+
+        // Update PiP controls if in PiP mode
+        updatePipControls()
     }
 
     // Update the pauseVideo() method
@@ -612,6 +655,9 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             Toast.makeText(this, "Error pausing video: ${e.message}", Toast.LENGTH_SHORT).show()
             e.printStackTrace()
         }
+
+        // Update PiP controls if in PiP mode
+        updatePipControls()
     }
 
     // Update the playInFullscreen function
@@ -861,14 +907,55 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
             playerView.player = player
 
-            // Create data source factory with enhanced headers
-            val dataSourceFactory = if (isAkamaizedStream(url)) {
+            // Improved handling for M3U8 streams on Android 14+
+            val isAndroid14Plus = Build.VERSION.SDK_INT >= 34
+            val isM3u8Stream = url?.contains(".m3u8", ignoreCase = true) == true
+            
+            // Detect if this is a protected stream that needs special handling
+            val isProtectedM3u8 = isM3u8Stream && 
+                                (url?.contains("workers.dev", ignoreCase = true) == true || 
+                                 url?.contains("drmlive", ignoreCase = true) == true ||
+                                 url?.contains("hdntl=", ignoreCase = true) == true ||
+                                 url?.contains("hdnts=", ignoreCase = true) == true ||
+                                 url?.contains("hmac=", ignoreCase = true) == true)
+            
+            // Set proper user agent based on Android version and stream type
+            val effectiveUserAgent = when {
+                isAndroid14Plus && isProtectedM3u8 -> 
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                isProtectedM3u8 -> 
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                else -> 
+                    userAgent ?: Util.getUserAgent(this, "URLPlayerBeta")
+            }
+            
+            // Create data source factory with headers appropriate for the stream type
+            val dataSourceFactory = if (isProtectedM3u8) {
+                // Use enhanced headers for protected streams
+                DefaultHttpDataSource.Factory()
+                    .setUserAgent(effectiveUserAgent)
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(30000)  // Increased timeout for Android 14+
+                    .setReadTimeoutMs(30000)     // Increased timeout for Android 14+
+                    .setDefaultRequestProperties(mapOf(
+                        "Accept" to "*/*",
+                        "Accept-Language" to "en-US,en;q=0.9",
+                        "Origin" to "https://${Uri.parse(url)?.host ?: ""}",
+                        "Referer" to "https://${Uri.parse(url)?.host ?: ""}",
+                        "Connection" to "keep-alive",
+                        "Sec-Fetch-Dest" to "empty",
+                        "Sec-Fetch-Mode" to "cors",
+                        "Sec-Fetch-Site" to "cross-site",
+                        "Pragma" to "no-cache",
+                        "Cache-Control" to "no-cache"
+                    ))
+            } else if (isAkamaizedStream(url)) {
                 // Special handling for Akamaized streams
                 DefaultHttpDataSource.Factory()
-                    .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    .setUserAgent(effectiveUserAgent)
                     .setAllowCrossProtocolRedirects(true)
-                    .setConnectTimeoutMs(15000)
-                    .setReadTimeoutMs(15000)
+                    .setConnectTimeoutMs(if (isAndroid14Plus) 30000 else 15000)
+                    .setReadTimeoutMs(if (isAndroid14Plus) 30000 else 15000)
                     .setDefaultRequestProperties(mapOf(
                         "Accept" to "*/*",
                         "Accept-Language" to "en-US,en;q=0.9",
@@ -882,7 +969,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             } else {
                 // Regular data source factory for other streams
                 DefaultHttpDataSource.Factory()
-                    .setUserAgent(userAgent ?: Util.getUserAgent(this, "URLPlayerBeta"))
+                    .setUserAgent(effectiveUserAgent)
                     .setAllowCrossProtocolRedirects(true)
                     .setConnectTimeoutMs(15000)
                     .setReadTimeoutMs(15000)
@@ -893,22 +980,26 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         "Connection" to "keep-alive"
                     ))
             }
-
+            
             // Create media source based on URL type
             val mediaItem = MediaItem.fromUri(url ?: return)
             val mediaSource = when {
-                // HLS streams
+                // Enhanced m3u8 detection including workers.dev and drmlive sources
                 url?.contains(".m3u8", ignoreCase = true) == true ||
                         url?.contains(".m3u", ignoreCase = true) == true ||
                         url?.contains(".hls", ignoreCase = true) == true ||
                         url?.contains("akamaized", ignoreCase = true) == true ||
-                        url?.contains("hdntl=exp", ignoreCase = true) == true ||
+                        url?.contains("hdntl=", ignoreCase = true) == true ||
+                        url?.contains("hdnts=", ignoreCase = true) == true ||
                         url?.contains("hmac=", ignoreCase = true) == true ||
+                        url?.contains("workers.dev", ignoreCase = true) == true ||
+                        url?.contains("drmlive", ignoreCase = true) == true ||
                         (url?.contains(".php", ignoreCase = true) == true &&
                                 url?.contains("?", ignoreCase = true) == true) -> {
                     isLiveStream = true
-                    if (isAkamaizedStream(url)) {
-                        // Special handling for Akamaized streams
+                    
+                    // For protected streams, enable chunkless preparation
+                    if (isProtectedM3u8 || isAkamaizedStream(url)) {
                         HlsMediaSource.Factory(dataSourceFactory)
                             .setAllowChunklessPreparation(true)
                             .createMediaSource(mediaItem)
@@ -980,11 +1071,11 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     when (state) {
                         Player.STATE_BUFFERING -> {
                             playbackState = PlaybackState.BUFFERING
-                            progressBar.visibility = View.VISIBLE
+                            progressBar.visibility = AndroidView.VISIBLE
                             // Don't change play/pause button during buffering
                         }
                         Player.STATE_READY -> {
-                            progressBar.visibility = View.GONE
+                            progressBar.visibility = AndroidView.GONE
                             isPlayerReady = true
                             if (wasPlayingBeforePause) {
                                 playbackState = PlaybackState.PLAYING
@@ -1025,11 +1116,47 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     errorTextView.visibility = View.VISIBLE
                     progressBar.visibility = View.GONE
 
-                    // Check if it's an authentication error
-                    if (error.cause?.message?.contains("Input does not start with the #EXTM3U header") == true) {
-                        errorTextView.text = "Authentication error or invalid stream URL. The stream may have expired."
-
-                        // Show retry button if not already added
+                    // Check for specific errors that indicate protected streams
+                    val errorMessage = error.message ?: "Unknown error"
+                    
+                    // Special handling for Android 14+ errors
+                    val isAndroid14Plus = Build.VERSION.SDK_INT >= 34
+                    
+                    if (isAndroid14Plus && 
+                        (errorMessage.contains("m3u8") || 
+                         errorMessage.contains("403") || 
+                         errorMessage.contains("401") || 
+                         errorMessage.contains("Authentication") || 
+                         errorMessage.contains("EXTM3U") || 
+                         errorMessage.contains("playlist") || 
+                         (url?.contains("workers.dev") == true) || 
+                         (url?.contains("drmlive") == true))) {
+                        
+                        errorTextView.text = "Stream protection detected. Retrying with enhanced compatibility..."
+                        
+                        // Automatically retry with enhanced browser headers for Android 14+
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            retryWithEnhancedAndroid14Headers()
+                        }, 1000)
+                    } else if (errorMessage.contains("m3u8") || 
+                              errorMessage.contains("403") || 
+                              errorMessage.contains("401") || 
+                              errorMessage.contains("Authentication") || 
+                              errorMessage.contains("EXTM3U") || 
+                              errorMessage.contains("playlist") || 
+                              (url?.contains("workers.dev") == true) || 
+                              (url?.contains("drmlive") == true)) {
+                        
+                        errorTextView.text = "Authentication error: This stream requires special headers. Retrying..."
+                        
+                        // Automatically retry with browser headers for other Android versions
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            retryWithBrowserHeaders()
+                        }, 1000)
+                    } else {
+                        errorTextView.text = "Playback error: ${error.message}"
+                        
+                        // Show manual retry button
                         if (errorTextView.parent is ViewGroup) {
                             val container = errorTextView.parent as ViewGroup
                             if (container.findViewById<Button>(R.id.retry_button) == null) {
@@ -1037,14 +1164,16 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                     id = R.id.retry_button
                                     text = "Retry with Browser Headers"
                                     setOnClickListener {
-                                        retryWithBrowserHeaders()
+                                        if (isAndroid14Plus) {
+                                            retryWithEnhancedAndroid14Headers()
+                                        } else {
+                                            retryWithBrowserHeaders()
+                                        }
                                     }
                                 }
                                 container.addView(retryButton)
                             }
                         }
-                    } else {
-                        errorTextView.text = "Playback error: ${error.message}"
                     }
                 }
             })
@@ -1224,6 +1353,10 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        
+        // Unregister PiP action receiver
+        unregisterPipActionReceiver()
+        
         // Use the comprehensive cleanup method for onDestroy
         try {
             releasePlayerResources()
@@ -1334,33 +1467,40 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 }
             }
         }
+        
+        // Unregister pip receiver when exiting PiP mode
+        if (!isInPictureInPictureMode) {
+            unregisterPipActionReceiver()
+        }
     }
     
     // Add this new method to properly release all player resources
     private fun releasePlayerResources() {
         try {
             // Stop and clear the player
-            player.stop()
-            player.clearMediaItems()
-            
-            // Release audio focus
-            audioManager?.abandonAudioFocus(null)
-            
-            // Release the loudness enhancer if initialized
-            try {
-                if (::loudnessEnhancer.isInitialized) {
-                    loudnessEnhancer.enabled = false
-                    loudnessEnhancer.release()
+            if (::player.isInitialized) {
+                player.stop()
+                player.clearMediaItems()
+                
+                // Release audio focus
+                audioManager?.abandonAudioFocus(null)
+                
+                // Release the loudness enhancer if initialized
+                try {
+                    if (::loudnessEnhancer.isInitialized) {
+                        loudnessEnhancer.enabled = false
+                        loudnessEnhancer.release()
+                    }
+                } catch (e: Exception) {
+                    Log.e("PlayerActivity", "Error releasing loudness enhancer: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.e("PlayerActivity", "Error releasing loudness enhancer: ${e.message}")
+                
+                // Finally release the player
+                player.release()
+                
+                // Mark player as not ready to prevent further usage
+                isPlayerReady = false
             }
-            
-            // Finally release the player
-            player.release()
-            
-            // Mark player as not ready to prevent further usage
-            isPlayerReady = false
         } catch (e: Exception) {
             Log.e("PlayerActivity", "Error releasing player resources: ${e.message}")
         }
@@ -1368,13 +1508,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     
     // Add this new method to register a PiP close handler for Android 14+
     private fun registerPipCloseHandler() {
-        if (Build.VERSION.SDK_INT >= 34) { // Android 14+
+        if (Build.VERSION.SDK_INT >= 34) { // Android 14 (UPSIDE_DOWN_CAKE)
             try {
                 // Use window manager to detect when PiP window is closed
                 val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
                 
                 // Create a special view to monitor PiP state
-                val monitorView = View(this).apply {
+                val monitorView = AndroidView(this).apply {
                     // We don't display this view, it's just for monitoring
                     visibility = View.GONE
                 }
@@ -1423,45 +1563,18 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-
-        // Only enter PiP mode if player is initialized and we're not already in PiP mode
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        
+        // Only enter PiP mode if eligible
+        if (PipHelper.isPipSupported(this) &&
             ::player.isInitialized &&
             !isInPictureInPictureMode &&
             isPlayerReady) {
-
+            
             // Set flag to prevent ads when PiP is requested
             isPipRequested = true
-
-            try {
-                // Create PiP params with aspect ratio based on video dimensions
-                val videoRatio = if (player.videoFormat != null) {
-                    Rational(player.videoFormat!!.width, player.videoFormat!!.height)
-                } else {
-                    Rational(16, 9) // Default aspect ratio
-                }
-
-                val params = PictureInPictureParams.Builder()
-                    .setAspectRatio(videoRatio)
-                    .build()
-
-                enterPictureInPictureMode(params)
-
-                // Hide controls when entering PiP
-                binding.playerView.hideController()
-                binding.lockButton.visibility = View.GONE
-                binding.brightnessIcon.visibility = View.GONE
-                binding.volumeIcon.visibility = View.GONE
-
-                // Set flag to prevent ads when PiP is requested
-                isPipRequested = true
-
-                // Ensure video is playing
-                playVideo()
-            } catch (e: Exception) {
-                Log.e("PlayerActivity", "Failed to enter PiP mode: ${e.message}")
-                isPipRequested = false
-            }
+            
+            // Enter PiP mode using helper
+            enterPictureInPictureMode()
         }
     }
 
@@ -1893,6 +2006,19 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
+        
+        // Set navigation bar color to transparent (for Android 14+)
+        if (Build.VERSION.SDK_INT >= 34) { // Android 14
+            window.navigationBarColor = Color.TRANSPARENT
+            window.statusBarColor = Color.TRANSPARENT
+            
+            // Additional settings for edge-to-edge on Android 14+
+            try {
+                window.setDecorFitsSystemWindows(false)
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Error in edge-to-edge setup: ${e.message}")
+            }
+        }
     }
 
     // Add this method to toggle notch mode
@@ -2016,261 +2142,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         }
     }
 
-    // Disney+ Hotstar style GO LIVE button implementation without delays
-    private fun addGoLiveButton() {
-        if (isLiveStream) {
-            try {
-                // Generate ID if not already generated
-                if (goLiveButtonId == View.NO_ID) {
-                    goLiveButtonId = View.generateViewId()
-                }
-
-                // Find or create a "Go Live" button in your layout
-                var goLiveButton = playerView.findViewById<Button>(goLiveButtonId)
-
-                // If button doesn't exist in layout, create it dynamically
-                if (goLiveButton == null) {
-                    goLiveButton = Button(this).apply {
-                        id = goLiveButtonId
-                        text = "GO LIVE"
-
-                        // Disney+ Hotstar style - white text on red background
-                        setTextColor(Color.WHITE)
-                        setTypeface(typeface, Typeface.BOLD)
-
-                        // Create a background with rounded corners and red background (Hotstar style)
-                        val backgroundDrawable = GradientDrawable().apply {
-                            shape = GradientDrawable.RECTANGLE
-                            cornerRadius = 25f // More rounded corners like Hotstar
-                            setColor(Color.RED) // Solid red background like Hotstar
-                        }
-                        background = backgroundDrawable
-
-                        // Style the button
-                        setPadding(40, 12, 40, 12) // Wider padding for better appearance
-                        textSize = 14f
-                        elevation = 6f // Increased elevation for better shadow effect
-
-                        // Add a subtle stroke for better visibility
-                        (background as GradientDrawable).setStroke(2, Color.parseColor("#FFCCCCCC"))
-
-                        // Position the button in the layout - Disney+ Hotstar places it at the bottom center
-                        val params = FrameLayout.LayoutParams(
-                            FrameLayout.LayoutParams.WRAP_CONTENT,
-                            FrameLayout.LayoutParams.WRAP_CONTENT
-                        ).apply {
-                            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                            bottomMargin = 140 // Position above the progress bar
-                        }
-
-                        layoutParams = params
-                        visibility = View.GONE
-
-                        // Add the button to the player view
-                        (playerView as FrameLayout).addView(this)
-
-                        // Set up click listener for immediate response
-                        setOnClickListener {
-                            // Hotstar-style animation
-                            val scaleDown = ObjectAnimator.ofFloat(it, "scaleX", 1f, 0.85f)
-                            val scaleDownY = ObjectAnimator.ofFloat(it, "scaleY", 1f, 0.85f)
-                            val scaleUp = ObjectAnimator.ofFloat(it, "scaleX", 0.85f, 1.05f)
-                            val scaleUpY = ObjectAnimator.ofFloat(it, "scaleY", 0.85f, 1.05f)
-                            val scaleNormal = ObjectAnimator.ofFloat(it, "scaleX", 1.05f, 1f)
-                            val scaleNormalY = ObjectAnimator.ofFloat(it, "scaleY", 1.05f, 1f)
-                            val fadeOut = ObjectAnimator.ofFloat(it, "alpha", 1f, 0f)
-
-                            val animSet = AnimatorSet()
-
-                            // First do the press effect
-                            val pressEffect = AnimatorSet()
-                            pressEffect.playTogether(scaleDown, scaleDownY)
-
-                            // Then do the release effect
-                            val releaseEffect = AnimatorSet()
-                            releaseEffect.playTogether(scaleUp, scaleUpY)
-
-                            // Then normalize
-                            val normalizeEffect = AnimatorSet()
-                            normalizeEffect.playTogether(scaleNormal, scaleNormalY)
-
-                            // Chain them together
-                            animSet.playSequentially(pressEffect, releaseEffect, normalizeEffect, fadeOut)
-                            animSet.duration = 200 // Even faster animation for immediate feedback
-                            animSet.start()
-
-                            // Show a red flash effect across the screen (like Hotstar does)
-                            val flashView = View(context).apply {
-                                setBackgroundColor(Color.parseColor("#33FF0000")) // Semi-transparent red
-                                layoutParams = FrameLayout.LayoutParams(
-                                    FrameLayout.LayoutParams.MATCH_PARENT,
-                                    FrameLayout.LayoutParams.MATCH_PARENT
-                                )
-                                alpha = 0f
-                            }
-                            (playerView as FrameLayout).addView(flashView)
-
-                            // Animate the flash
-                            val flashIn = ObjectAnimator.ofFloat(flashView, "alpha", 0f, 0.3f)
-                            val flashOut = ObjectAnimator.ofFloat(flashView, "alpha", 0.3f, 0f)
-                            val flashAnim = AnimatorSet()
-                            flashAnim.playSequentially(flashIn, flashOut)
-                            flashAnim.duration = 200 // Faster animation
-                            flashAnim.addListener(object : AnimatorListenerAdapter() {
-                                override fun onAnimationEnd(animation: Animator) {
-                                    (playerView as FrameLayout).removeView(flashView)
-                                }
-                            })
-                            flashAnim.start()
-
-                            // Get the latest timeline window
-                            val currentWindow = player.currentTimeline.getWindow(
-                                player.currentMediaItemIndex, Timeline.Window()
-                            )
-
-                            // Hotstar optimization: Temporarily increase playback speed to catch up
-                            val originalSpeed = player.playbackParameters.speed
-                            player.setPlaybackParameters(PlaybackParameters(2.0f)) // Even faster catch-up
-
-                            // Seek to the live edge immediately
-                            player.seekTo(currentWindow.durationMs)
-                            player.play()
-
-                            // Reset playback speed after a short delay
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                player.setPlaybackParameters(PlaybackParameters(originalSpeed))
-                            }, 500) // Shorter delay for immediate response
-
-                            // Update state immediately
-                            isAtLiveEdge = true
-                            lastLivePosition = currentWindow.durationMs
-
-                            // Update UI immediately
-                            updateLiveEdgeIndicator(true)
-
-                            // Show feedback - Disney+ Hotstar style toast
-                            showCustomToast("You're now watching live")
-
-                            // Hide button immediately
-                            visibility = View.GONE
-                        }
-                    }
-                }
-
-                // Start pulse animation for the button
-                startHotstarPulseAnimation(goLiveButton)
-
-            } catch (e: Exception) {
-                Log.e("PlayerActivity", "Error adding Go Live button: ${e.message}")
-            }
-        }
-    }
-
-    // Improved check for live position with Hotstar-like behavior - more responsive
-    private fun checkLivePosition() {
-        try {
-            // Get the current window from timeline
-            val currentWindow = player.currentTimeline.getWindow(
-                player.currentMediaItemIndex, Timeline.Window()
-            )
-
-            // Get duration (live edge position)
-            val duration = currentWindow.durationMs
-            if (duration <= 0) return
-
-            // Get current position with real-time interpolation
-            val timeSincePositionUpdate = System.currentTimeMillis() - lastPositionUpdateTime
-            val currentPosition = if (player.isPlaying) {
-                player.contentPosition + (timeSincePositionUpdate * player.playbackParameters.speed).toLong()
-            } else {
-                player.contentPosition
-            }
-
-            // Calculate how far behind live we are
-            val timeBehindLive = duration - currentPosition
-
-            // Update the last known live position
-            lastLivePosition = duration
-
-            // Check if we're at live edge (within threshold)
-            val wasAtLiveEdge = isAtLiveEdge
-            isAtLiveEdge = timeBehindLive < 500 // 500ms threshold for minimal delay
-
-            // Find the GO LIVE button
-            val goLiveButton = playerView.findViewById<Button>(goLiveButtonId) ?: return
-
-            // Update the live indicator text
-            val liveText = playerView.findViewById<TextView>(R.id.exo_live_text)
-            liveText?.apply {
-                visibility = View.VISIBLE
-
-                // Update text based on how far behind we are
-                if (isAtLiveEdge) {
-                    text = "LIVE"
-                    setTextColor(Color.RED)
-                    // Add a small red dot before the text (Hotstar style)
-                    val dotDrawable = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(Color.RED)
-                        setSize(12, 12)
-                    }
-                    setCompoundDrawablesWithIntrinsicBounds(dotDrawable, null, null, null)
-                    compoundDrawablePadding = 8
-                } else {
-                    // Format time behind live (Hotstar style)
-                    if (timeBehindLive >= 60000) {
-                        // More than a minute behind
-                        val minutes = timeBehindLive / 60000
-                        text = "-${minutes}m"
-                    } else {
-                        // Less than a minute behind
-                        val seconds = timeBehindLive / 1000
-                        text = "-${seconds}s"
-                    }
-                    setTextColor(Color.WHITE)
-                    // Remove the dot when not live
-                    setCompoundDrawablesWithIntrinsicBounds(null, null, null, null)
-                }
-            }
-
-            // Handle GO LIVE button visibility with immediate response
-            if (!isAtLiveEdge && timeBehindLive > 1000) { // 1 second threshold
-                // We're behind live, show the button immediately if it was hidden
-                if (goLiveButton.visibility != View.VISIBLE) {
-                    goLiveButton.alpha = 0f
-                    goLiveButton.visibility = View.VISIBLE
-
-                    // Fade in animation - quick and responsive
-                    goLiveButton.animate().alpha(1f).setDuration(150).start()
-                }
-            } else {
-                // We're at live edge, hide the button immediately if it was visible
-                if (goLiveButton.visibility == View.VISIBLE) {
-                    // Fade out animation - quick and responsive
-                    goLiveButton.animate().alpha(0f).setDuration(150)
-                        .withEndAction { goLiveButton.visibility = View.GONE }.start()
-                }
-            }
-
-            // If we just reached live edge, show a toast (Hotstar does this)
-            if (!wasAtLiveEdge && isAtLiveEdge) {
-                showCustomToast("You're now watching live")
-            }
-
-            // Update last position time for smooth interpolation
-            lastPositionUpdateTime = System.currentTimeMillis()
-
-        } catch (e: Exception) {
-            Log.e("PlayerActivity", "Error checking live position: ${e.message}")
-        }
-    }
-
+    
     // Improved Hotstar-style pulse animation for GO LIVE button
     private fun startHotstarPulseAnimation(view: View) {
         try {
             // Create a pulsing dot next to the GO LIVE text (Hotstar style)
             val dotSize = 12
-            val dotView = View(this).apply {
+            val dotView = AndroidView(this).apply {
                 val dotDrawable = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
                     setColor(Color.WHITE)
@@ -2798,63 +2676,43 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
     // Replace enterPipMode() with this method that uses the standard Android API
     override fun enterPictureInPictureMode() {
-        val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            appOps.checkOpNoThrow(
-                AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
-                android.os.Process.myUid(),
-                packageName
-            ) == AppOpsManager.MODE_ALLOWED
-        } else {
-            false
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (status) {
-                // Save current state before entering PiP
-                prePipScreenMode = currentScreenMode
-                prePipNotchEnabled = isNotchModeEnabled
-
-                // Hide controls immediately before entering PiP
+        try {
+            // Save pre-PiP state
+            prePipScreenMode = currentScreenMode
+            prePipNotchEnabled = isNotchModeEnabled
+            
+            // Set flag to prevent ads when PiP is requested
+            isPipRequested = true
+            
+            // Use PipHelper to enter PiP mode with proper configurations for Android version
+            val videoWidth = player.videoFormat?.width
+            val videoHeight = player.videoFormat?.height
+            
+            if (pipHelper.enterPipMode(videoWidth, videoHeight, isPlaying)) {
+                // Hide controls when entering PiP
                 binding.playerView.hideController()
                 binding.lockButton.visibility = View.GONE
                 binding.brightnessIcon.visibility = View.GONE
                 binding.volumeIcon.visibility = View.GONE
-
-                // Enter PiP mode
-                try {
-                    // Create PiP params with aspect ratio based on video dimensions
-                    val videoRatio = if (player.videoFormat != null) {
-                        Rational(player.videoFormat!!.width, player.videoFormat!!.height)
-                    } else {
-                        Rational(16, 9) // Default aspect ratio
+                
+                // Ensure video is playing
+                playVideo()
+                
+                // For Android 14+, set up periodic check for PiP state changes
+                if (Build.VERSION.SDK_INT >= 34) {
+                    pipHelper.fixPipCloseIssue {
+                        // This will run when PiP is closed without proper callbacks
+                        if (isPlaying) {
+                            pauseVideo()
+                        }
+                        releasePlayerResources()
+                        finish()
                     }
-
-                    val params = PictureInPictureParams.Builder()
-                        .setAspectRatio(videoRatio)
-                        .build()
-
-                    super.enterPictureInPictureMode(params)
-
-                    // Set flag to prevent ads when PiP is requested
-                    isPipRequested = true
-
-                    // Ensure video is playing
-                    playVideo()
-                } catch (e: Exception) {
-                    Log.e("PlayerActivity", "Failed to enter PiP mode: ${e.message}")
-                    Toast.makeText(this, "Failed to enter PiP mode", Toast.LENGTH_SHORT).show()
                 }
-            } else {
-                // Open PiP settings if not enabled
-                val intent = Intent(
-                    "android.settings.PICTURE_IN_PICTURE_SETTINGS",
-                    Uri.parse("package:$packageName")
-                )
-                startActivity(intent)
             }
-        } else {
-            Toast.makeText(this, "Feature Not Supported!!", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error entering PiP mode: ${e.message}")
+            Toast.makeText(this, "PiP mode not available", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -3093,8 +2951,8 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             }
 
             // Hide error view
-            errorTextView.visibility = View.GONE
-            progressBar.visibility = View.VISIBLE
+            errorTextView.visibility = AndroidView.GONE
+            progressBar.visibility = AndroidView.VISIBLE
 
             // Create enhanced data source factory with browser-like headers
             val enhancedDataSourceFactory = DefaultHttpDataSource.Factory()
@@ -3470,6 +3328,240 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             })
         } catch (e: Exception) {
             Log.e("LiveStream", "Error setting up automatic live edge following: ${e.message}")
+        }
+    }
+
+    // Add this method to create PiP params based on Android version
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun createPipParams(): PictureInPictureParams {
+        val builder = PictureInPictureParams.Builder()
+        
+        // Calculate the aspect ratio based on the video dimensions
+        val videoWidth = playerView.width
+        val videoHeight = playerView.height
+        
+        if (videoWidth > 0 && videoHeight > 0) {
+            val aspectRatio = Rational(videoWidth, videoHeight)
+            builder.setAspectRatio(aspectRatio)
+        }
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setSeamlessResizeEnabled(true)
+            // Remove this line as it's unsupported
+        }
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Configure auto-enter PiP aspects for newer Android versions
+            try {
+                val playAction = PendingIntent.getBroadcast(
+                    this,
+                    REQUEST_CODE_PLAY,
+                    Intent(ACTION_PLAY),
+                    PendingIntent.FLAG_IMMUTABLE
+                )
+                
+                val pauseAction = PendingIntent.getBroadcast(
+                    this, 
+                    REQUEST_CODE_PAUSE,
+                    Intent(ACTION_PAUSE),
+                    PendingIntent.FLAG_IMMUTABLE
+                )
+                
+                val actions = mutableListOf<RemoteAction>()
+                
+                // Add play/pause action based on current state
+                if (player?.isPlaying == true) {
+                    actions.add(
+                        RemoteAction(
+                            Icon.createWithResource(this, R.drawable.pause_icon),
+                            "Pause", "Pause",
+                            pauseAction
+                        )
+                    )
+                } else {
+                    actions.add(
+                        RemoteAction(
+                            Icon.createWithResource(this, R.drawable.play_icon),
+                            "Play", "Play",
+                            playAction
+                        )
+                    )
+                }
+                
+                builder.setActions(actions)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting up PiP actions: ${e.message}")
+            }
+        }
+        
+        return builder.build()
+    }
+
+    // Register broadcast receiver for handling PiP action buttons
+    private fun registerPipActionReceiver() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                // Unregister existing receiver if any
+                unregisterPipActionReceiver()
+                
+                // Create and register new receiver
+                pipActionsReceiver = object : BroadcastReceiver() {
+                    override fun onReceive(context: Context, intent: Intent) {
+                        if (intent.action == PIP_ACTION_PLAY) {
+                            playVideo()
+                            updatePipActions()
+                        } else if (intent.action == PIP_ACTION_PAUSE) {
+                            pauseVideo()
+                            updatePipActions()
+                        }
+                    }
+                }
+                
+                // Register receiver for both actions
+                val filter = IntentFilter().apply {
+                    addAction(PIP_ACTION_PLAY)
+                    addAction(PIP_ACTION_PAUSE)
+                }
+                registerReceiver(pipActionsReceiver, filter)
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Error registering PiP receiver: ${e.message}")
+            }
+        }
+    }
+
+    // Unregister PiP action receiver
+    private fun unregisterPipActionReceiver() {
+        try {
+            if (pipActionsReceiver != null) {
+                unregisterReceiver(pipActionsReceiver)
+                pipActionsReceiver = null
+            }
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error unregistering PiP receiver: ${e.message}")
+        }
+    }
+
+    // Update PiP controls when playback state changes
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun updatePipActions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && isInPictureInPictureMode) {
+            try {
+                val params = createPipParams()
+                setPictureInPictureParams(params)
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Error updating PiP actions: ${e.message}")
+            }
+        }
+    }
+
+    // Add this method to update PiP controls when playback state changes
+    private fun updatePipControls() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode) {
+            try {
+                val videoWidth = player.videoFormat?.width
+                val videoHeight = player.videoFormat?.height
+                pipHelper.updatePipParams(videoWidth, videoHeight, isPlaying)
+            } catch (e: Exception) {
+                Log.e("PlayerActivity", "Error updating PiP controls: ${e.message}")
+            }
+        }
+    }
+
+    // Add special Android 14+ retry method
+    private fun retryWithEnhancedAndroid14Headers() {
+        try {
+            // Release current player
+            if (::player.isInitialized) {
+                player.release()
+            }
+
+            // Hide error view
+            errorTextView.visibility = AndroidView.GONE
+            progressBar.visibility = AndroidView.VISIBLE
+
+            // Create enhanced data source factory with Android 14+ optimized headers
+            val enhancedDataSourceFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(30000)
+                .setReadTimeoutMs(30000)
+                .setDefaultRequestProperties(mapOf(
+                    "Accept" to "*/*",
+                    "Accept-Language" to "en-US,en;q=0.9",
+                    "Origin" to "https://${Uri.parse(url)?.host ?: ""}",
+                    "Referer" to "https://${Uri.parse(url)?.host ?: ""}",
+                    "Connection" to "keep-alive",
+                    "Sec-Fetch-Dest" to "empty",
+                    "Sec-Fetch-Mode" to "cors",
+                    "Sec-Fetch-Site" to "cross-site",
+                    "Pragma" to "no-cache",
+                    "Cache-Control" to "no-cache",
+                    "DNT" to "1"
+                ))
+
+            // Create new player with modern configuration
+            trackSelector = DefaultTrackSelector(this)
+            player = ExoPlayer.Builder(this)
+                .setTrackSelector(trackSelector)
+                .build()
+
+            playerView.player = player
+
+            // Create media source with enhanced factory optimized for Android 14+
+            val mediaItem = MediaItem.fromUri(url ?: return)
+            val mediaSource = HlsMediaSource.Factory(enhancedDataSourceFactory)
+                .setAllowChunklessPreparation(true)
+                .createMediaSource(mediaItem)
+
+            player.setMediaSource(mediaSource)
+            player.seekTo(playbackPosition)
+            player.playWhenReady = true
+            player.prepare()
+
+            // Add player listener
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    when (state) {
+                        Player.STATE_BUFFERING -> {
+                            playbackState = PlaybackState.BUFFERING
+                            progressBar.visibility = AndroidView.VISIBLE
+                        }
+                        Player.STATE_READY -> {
+                            progressBar.visibility = AndroidView.GONE
+                            isPlayerReady = true
+                            playbackState = PlaybackState.PLAYING
+                            player.play()
+                            updatePlayPauseButton(true)
+                        }
+                        Player.STATE_ENDED -> {
+                            playbackState = PlaybackState.ENDED
+                            updatePlayPauseButton(false)
+                            handlePlaybackEnded()
+                        }
+                        Player.STATE_IDLE -> {
+                            playbackState = PlaybackState.IDLE
+                            updatePlayPauseButton(false)
+                        }
+                    }
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    // Try one final attempt with mobile headers
+                    Log.e("PlayerActivity", "Android 14+ retry failed: ${error.message}")
+                    errorTextView.visibility = AndroidView.VISIBLE
+                    errorTextView.text = "Trying final compatibility method..."
+                    
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        retryWithBrowserHeaders()
+                    }, 1000)
+                }
+            })
+
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error retrying with Android 14+ headers: ${e.message}")
+            errorTextView.visibility = View.VISIBLE
+            errorTextView.text = "Failed to retry: ${e.message}"
+            progressBar.visibility = View.GONE
         }
     }
 }

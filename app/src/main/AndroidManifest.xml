@@ -12,6 +12,17 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    
+    <!-- For Android 14+ to prevent the system from terminating PiP playback -->
+    <uses-permission android:name="android.permission.UPDATE_DEVICE_STATS" 
+                     tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Feature declaration for PiP mode -->
+    <uses-feature android:name="android.software.picture_in_picture" android:required="false" />
+    <uses-feature android:name="android.hardware.faketouch" android:required="false" />
 
     <application
         android:name=".MyApplication"
@@ -34,9 +45,14 @@
             android:exported="false" />
         <activity
             android:name=".screen.PlayerActivity"
-            android:configChanges="orientation|screenSize|layoutDirection"
+            android:configChanges="orientation|screenSize|layoutDirection|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation"
             android:exported="true"
-            android:supportsPictureInPicture="true">
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
+            android:autoRemoveFromRecents="false"
+            android:documentLaunchMode="intoExisting"
+            android:launchMode="singleTask"
+            android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
