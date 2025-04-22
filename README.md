@@ -245,7 +245,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
  - [@samyak](mailto:arrowwouldpro@gmail.com)
 
-Project Link: [https://github.com/yourusername/URLPlayerBeta](https://github.com/samyak2403/URLPlayerBeta)
+Project Link: [https://github.com/samyak2403/URLPlayerBeta](https://github.com/samyak2403/URLPlayerBeta)
 
 ## Acknowledgments
 
