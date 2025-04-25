@@ -96,6 +96,7 @@ import android.view.View
 import com.samyak.urlplayerbeta.utils.PipHelper
 import android.content.pm.PackageManager
 import android.app.PendingIntent
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 
 
 class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
@@ -145,14 +146,6 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
     private var isManualQualityControl = false
 
-    private lateinit var gestureDetectorCompat: GestureDetectorCompat
-    private var minSwipeY: Float = 0f
-    private var brightness: Int = 0
-    private var volume: Int = 0
-    private var audioManager: AudioManager? = null
-
-    private var isLocked = false
-
     // Update supported formats with comprehensive streaming formats
     private val supportedFormats = mapOf(
         // Common video formats
@@ -165,34 +158,42 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         "wmv" to "video/x-ms-wmv",
         "flv" to "video/x-flv",
 
-        // Streaming formats
-        "m3u8" to "application/vnd.apple.mpegurl",  // Updated MIME type
-        "m3u" to "application/vnd.apple.mpegurl",   // Updated MIME type
-        "ts" to "video/mp2t",
-        "mpd" to "application/dash+xml",
-        "ism" to "application/vnd.ms-sstr+xml",
+        // HLS Streaming formats - comprehensive support
+        "m3u8" to "application/vnd.apple.mpegurl",     // Standard HLS format
+        "m3u" to "application/vnd.apple.mpegurl",      // Basic M3U playlist
+        "hls" to "application/vnd.apple.mpegurl",      // HLS format
+        "vtt" to "text/vtt",                           // WebVTT subtitles used in HLS
 
-        // Transport stream formats
-        "mts" to "video/mp2t",
-        "m2ts" to "video/mp2t",
+        // Transport stream formats used in HLS
+        "ts" to "video/mp2t",           // Transport Stream segments
+        "mts" to "video/mp2t",          // MPEG Transport Stream
+        "m2ts" to "video/mp2t",         // MPEG-2 Transport Stream
+        "fmp4" to "video/mp4",          // Fragmented MP4 segments used in HLS
+        "cmfv" to "video/mp4",          // Common Media Format Video
+
+        // DASH streaming
+        "mpd" to "application/dash+xml",
+        "dash" to "application/dash+xml",
+        
+        // Smooth Streaming
+        "ism" to "application/vnd.ms-sstr+xml",
+        "isml" to "application/vnd.ms-sstr+xml",
+        "smooth" to "application/vnd.ms-sstr+xml",
 
         // Legacy formats
         "mp2" to "video/mpeg",
         "mpg" to "video/mpeg",
         "mpeg" to "video/mpeg",
 
-        // Additional streaming formats
-        "hls" to "application/vnd.apple.mpegurl",  // Updated MIME type
-        "dash" to "application/dash+xml",
-        "smooth" to "application/vnd.ms-sstr+xml",
-
         // Playlist formats
         "pls" to "audio/x-scpls",
         "asx" to "video/x-ms-asf",
         "xspf" to "application/xspf+xml",
 
-        // Add DASH format
-        "mpd" to "application/dash+xml",
+        // Additional secure streaming formats
+        "key" to "application/octet-stream",    // Encryption keys for HLS
+        "aac" to "audio/aac",                   // Audio segments in HLS
+        "mp3" to "audio/mpeg",                  // MP3 audio
     )
 
     private var isPlaying = false
@@ -325,6 +326,14 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
     // Inside the PlayerActivity class, add this property
     private lateinit var pipHelper: PipHelper
+
+    private lateinit var gestureDetectorCompat: GestureDetectorCompat
+    private var minSwipeY: Float = 0f
+    private var brightness: Int = 0
+    private var volume: Int = 0
+    private var audioManager: AudioManager? = null
+
+    private var isLocked = false
 
     @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -909,20 +918,38 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
             // Improved handling for M3U8 streams on Android 14+
             val isAndroid14Plus = Build.VERSION.SDK_INT >= 34
-            val isM3u8Stream = url?.contains(".m3u8", ignoreCase = true) == true
+            val isM3u8Stream = url?.lowercase()?.let { lowercaseUrl ->
+                lowercaseUrl.contains(".m3u8") || 
+                lowercaseUrl.contains(".m3u") || 
+                lowercaseUrl.contains("hls") || 
+                lowercaseUrl.contains("live") || 
+                lowercaseUrl.endsWith(".ts") ||
+                lowercaseUrl.contains("playlist") ||
+                lowercaseUrl.contains("manifest")
+            } ?: false
             
-            // Detect if this is a protected stream that needs special handling
-            val isProtectedM3u8 = isM3u8Stream && 
-                                (url?.contains("workers.dev", ignoreCase = true) == true || 
-                                 url?.contains("drmlive", ignoreCase = true) == true ||
-                                 url?.contains("hdntl=", ignoreCase = true) == true ||
-                                 url?.contains("hdnts=", ignoreCase = true) == true ||
-                                 url?.contains("hmac=", ignoreCase = true) == true)
+            // Enhanced detection for protected streams that need special handling
+            val isProtectedM3u8 = isM3u8Stream && (
+                url?.contains("workers.dev", ignoreCase = true) == true || 
+                url?.contains("drmlive", ignoreCase = true) == true ||
+                url?.contains("cloudflare", ignoreCase = true) == true ||
+                url?.contains("hdntl=", ignoreCase = true) == true ||
+                url?.contains("hdnts=", ignoreCase = true) == true ||
+                url?.contains("hmac=", ignoreCase = true) == true ||
+                url?.contains("token=", ignoreCase = true) == true ||
+                url?.contains("auth=", ignoreCase = true) == true ||
+                url?.contains("expires=", ignoreCase = true) == true ||
+                url?.contains("signature=", ignoreCase = true) == true ||
+                url?.contains("cloudfront", ignoreCase = true) == true ||
+                url?.contains("akamaized", ignoreCase = true) == true ||
+                url?.contains("fastly", ignoreCase = true) == true ||
+                url?.contains("cdn", ignoreCase = true) == true
+            )
             
             // Set proper user agent based on Android version and stream type
             val effectiveUserAgent = when {
                 isAndroid14Plus && isProtectedM3u8 -> 
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
                 isProtectedM3u8 -> 
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
                 else -> 
@@ -931,12 +958,12 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             
             // Create data source factory with headers appropriate for the stream type
             val dataSourceFactory = if (isProtectedM3u8) {
-                // Use enhanced headers for protected streams
+                // Use enhanced headers for protected streams, especially workers.dev
                 DefaultHttpDataSource.Factory()
                     .setUserAgent(effectiveUserAgent)
                     .setAllowCrossProtocolRedirects(true)
-                    .setConnectTimeoutMs(30000)  // Increased timeout for Android 14+
-                    .setReadTimeoutMs(30000)     // Increased timeout for Android 14+
+                    .setConnectTimeoutMs(30000)  // Increased timeout for protected streams
+                    .setReadTimeoutMs(30000)     // Increased timeout for protected streams
                     .setDefaultRequestProperties(mapOf(
                         "Accept" to "*/*",
                         "Accept-Language" to "en-US,en;q=0.9",
@@ -947,7 +974,10 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         "Sec-Fetch-Mode" to "cors",
                         "Sec-Fetch-Site" to "cross-site",
                         "Pragma" to "no-cache",
-                        "Cache-Control" to "no-cache"
+                        "Cache-Control" to "no-cache",
+                        // Add special headers for workers.dev and drmlive URLs
+                        "X-Requested-With" to "XMLHttpRequest",
+                        "DNT" to "1"
                     ))
             } else if (isAkamaizedStream(url)) {
                 // Special handling for Akamaized streams
@@ -984,7 +1014,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             // Create media source based on URL type
             val mediaItem = MediaItem.fromUri(url ?: return)
             val mediaSource = when {
-                // Enhanced m3u8 detection including workers.dev and drmlive sources
+                // Enhanced m3u8 detection with comprehensive pattern matching
                 url?.contains(".m3u8", ignoreCase = true) == true ||
                         url?.contains(".m3u", ignoreCase = true) == true ||
                         url?.contains(".hls", ignoreCase = true) == true ||
@@ -992,22 +1022,28 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         url?.contains("hdntl=", ignoreCase = true) == true ||
                         url?.contains("hdnts=", ignoreCase = true) == true ||
                         url?.contains("hmac=", ignoreCase = true) == true ||
+                        url?.contains("token=", ignoreCase = true) == true ||
+                        url?.contains("auth=", ignoreCase = true) == true ||
                         url?.contains("workers.dev", ignoreCase = true) == true ||
                         url?.contains("drmlive", ignoreCase = true) == true ||
+                        url?.contains("live", ignoreCase = true) == true ||
+                        url?.contains("manifest", ignoreCase = true) == true ||
+                        url?.contains("playlist", ignoreCase = true) == true ||
+                        url?.contains("master", ignoreCase = true) == true ||
+                        url?.contains("index", ignoreCase = true) == true && (
+                            url!!.contains(".m3u8", ignoreCase = true) ||
+                            url!!.contains(".ts", ignoreCase = true)
+                        ) ||
                         (url?.contains(".php", ignoreCase = true) == true &&
                                 url?.contains("?", ignoreCase = true) == true) -> {
                     isLiveStream = true
                     
-                    // For protected streams, enable chunkless preparation
-                    if (isProtectedM3u8 || isAkamaizedStream(url)) {
-                        HlsMediaSource.Factory(dataSourceFactory)
-                            .setAllowChunklessPreparation(true)
-                            .createMediaSource(mediaItem)
-                    } else {
-                        // Regular HLS handling
-                        HlsMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(mediaItem)
-                    }
+                    // Configure HLS media source with advanced options
+                    val hlsMediaSourceFactory = HlsMediaSource.Factory(dataSourceFactory)
+                        .setAllowChunklessPreparation(true)  // Enable chunkless preparation for all HLS streams
+                    
+                    // Finally create the media source
+                    hlsMediaSourceFactory.createMediaSource(mediaItem)
                 }
 
                 // DASH streams
@@ -1122,15 +1158,24 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     // Special handling for Android 14+ errors
                     val isAndroid14Plus = Build.VERSION.SDK_INT >= 34
                     
-                    if (isAndroid14Plus && 
+                    // Check specifically for workers.dev and drmlive URLs
+                    if (url?.contains("workers.dev", ignoreCase = true) == true ||
+                        url?.contains("drmlive", ignoreCase = true) == true) {
+                        
+                        errorTextView.text = "workers.dev stream detected. Applying special handling..."
+                        
+                        // Automatically retry with specialized workers.dev handling
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            retryWorkersDevStream()
+                        }, 1000)
+                    }
+                    else if (isAndroid14Plus && 
                         (errorMessage.contains("m3u8") || 
                          errorMessage.contains("403") || 
                          errorMessage.contains("401") || 
                          errorMessage.contains("Authentication") || 
                          errorMessage.contains("EXTM3U") || 
-                         errorMessage.contains("playlist") || 
-                         (url?.contains("workers.dev") == true) || 
-                         (url?.contains("drmlive") == true))) {
+                         errorMessage.contains("playlist"))) {
                         
                         errorTextView.text = "Stream protection detected. Retrying with enhanced compatibility..."
                         
@@ -1143,9 +1188,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                               errorMessage.contains("401") || 
                               errorMessage.contains("Authentication") || 
                               errorMessage.contains("EXTM3U") || 
-                              errorMessage.contains("playlist") || 
-                              (url?.contains("workers.dev") == true) || 
-                              (url?.contains("drmlive") == true)) {
+                              errorMessage.contains("playlist")) {
                         
                         errorTextView.text = "Authentication error: This stream requires special headers. Retrying..."
                         
@@ -1156,7 +1199,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                     } else {
                         errorTextView.text = "Playback error: ${error.message}"
                         
-                        // Show manual retry button
+                        // Show retry options
                         if (errorTextView.parent is ViewGroup) {
                             val container = errorTextView.parent as ViewGroup
                             if (container.findViewById<Button>(R.id.retry_button) == null) {
@@ -1164,7 +1207,10 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                                     id = R.id.retry_button
                                     text = "Retry with Browser Headers"
                                     setOnClickListener {
-                                        if (isAndroid14Plus) {
+                                        if (url?.contains("workers.dev", ignoreCase = true) == true ||
+                                           url?.contains("drmlive", ignoreCase = true) == true) {
+                                            retryWorkersDevStream()
+                                        } else if (isAndroid14Plus) {
                                             retryWithEnhancedAndroid14Headers()
                                         } else {
                                             retryWithBrowserHeaders()
@@ -1898,12 +1944,27 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             // First check for streaming formats
             val lowercaseUrl = url.lowercase()
             when {
-                // HLS streams
+                // HLS streams with comprehensive detection
                 lowercaseUrl.endsWith(".m3u8") ||
-                        lowercaseUrl.endsWith(".m3u") -> "application/vnd.apple.mpegurl"
+                        lowercaseUrl.endsWith(".m3u") ||
+                        lowercaseUrl.contains("manifest") ||
+                        lowercaseUrl.contains("playlist") ||
+                        lowercaseUrl.contains(".hls") ||
+                        lowercaseUrl.contains("master") ||
+                        (lowercaseUrl.contains("index") && 
+                         (lowercaseUrl.contains(".m3u8") || lowercaseUrl.contains(".ts"))) -> 
+                    "application/vnd.apple.mpegurl"
 
                 // DASH streams
-                lowercaseUrl.endsWith(".mpd") -> "application/dash+xml"
+                lowercaseUrl.endsWith(".mpd") ||
+                        lowercaseUrl.contains("dash") -> 
+                    "application/dash+xml"
+                
+                // Transport streams
+                lowercaseUrl.endsWith(".ts") ||
+                        lowercaseUrl.endsWith(".mts") ||
+                        lowercaseUrl.endsWith(".m2ts") -> 
+                    "video/mp2t"
 
                 // Then check file extension
                 else -> {
@@ -1912,6 +1973,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                         url.contains("dash", ignoreCase = true) -> "application/dash+xml"
                         url.contains("hls", ignoreCase = true) -> "application/vnd.apple.mpegurl"
                         url.contains("smooth", ignoreCase = true) -> "application/vnd.ms-sstr+xml"
+                        url.contains("live", ignoreCase = true) -> "application/vnd.apple.mpegurl"
                         // Default to MP4 for unknown types
                         else -> "video/mp4"
                     }
@@ -3561,6 +3623,73 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             Log.e("PlayerActivity", "Error retrying with Android 14+ headers: ${e.message}")
             errorTextView.visibility = View.VISIBLE
             errorTextView.text = "Failed to retry: ${e.message}"
+            progressBar.visibility = View.GONE
+        }
+    }
+
+    // Add this method after retryWithBrowserHeaders() method
+    private fun retryWorkersDevStream() {
+        try {
+            if (::player.isInitialized) {
+                player.release()
+            }
+
+            // Hide error view
+            errorTextView.visibility = AndroidView.GONE
+            progressBar.visibility = AndroidView.VISIBLE
+
+            // Create specialized data source factory for workers.dev
+            val workersDevDataSourceFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(30000)
+                .setReadTimeoutMs(30000)
+                .setDefaultRequestProperties(mapOf(
+                    "Accept" to "*/*",
+                    "Accept-Language" to "en-US,en;q=0.9",
+                    "Origin" to "https://${Uri.parse(url)?.host ?: ""}",
+                    "Referer" to "https://${Uri.parse(url)?.host ?: ""}",
+                    "sec-ch-ua" to "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"121\", \"Chromium\";v=\"121\"",
+                    "sec-ch-ua-mobile" to "?0",
+                    "sec-ch-ua-platform" to "\"Windows\"",
+                    "Sec-Fetch-Dest" to "empty",
+                    "Sec-Fetch-Mode" to "cors",
+                    "Sec-Fetch-Site" to "cross-site",
+                    "X-Requested-With" to "XMLHttpRequest",
+                    "Pragma" to "no-cache",
+                    "Cache-Control" to "no-cache",
+                    "DNT" to "1"
+                ))
+
+            // Create new player
+            trackSelector = DefaultTrackSelector(this).apply {
+                setParameters(buildUponParameters().setMaxVideoSizeSd())
+            }
+
+            player = ExoPlayer.Builder(this)
+                .setTrackSelector(trackSelector)
+                .build()
+
+            playerView.player = player
+
+            // Create media source with enhanced factory
+            val mediaItem = MediaItem.fromUri(url ?: return)
+            val mediaSource = HlsMediaSource.Factory(workersDevDataSourceFactory)
+                .setAllowChunklessPreparation(true)
+                .createMediaSource(mediaItem)
+
+            player.setMediaSource(mediaSource)
+            player.seekTo(playbackPosition)
+            player.playWhenReady = true
+            player.prepare()
+
+            // Re-add player listeners
+            setupPlayerListeners()
+
+        } catch (e: Exception) {
+            Log.e("PlayerActivity", "Error retrying worker.dev stream: ${e.message}")
+            errorTextView.visibility = View.VISIBLE
+            errorTextView.text = "Failed to play workers.dev stream: ${e.message}"
             progressBar.visibility = View.GONE
         }
     }

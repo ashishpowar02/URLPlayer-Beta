@@ -145,5 +145,50 @@
 
     <string name="select_language">Select Language</string>
     <string name="language_changed">Language changed successfully</string>
+    
+    <!-- New About screen strings -->
+    <string name="latest_version">Already the latest version</string>
+    <string name="already_latest_version">You already have the latest version</string>
+    <string name="cannot_open_browser">Cannot open browser</string>
+    <string name="what_is_app">What is URL Player?</string>
+    <string name="visit_website">Visit official website</string>
+    <string name="check_updates">Check for updates</string>
+    <string name="copyright">Copyright © 2024 Samyak2403\nAll Rights Reserved.</string>
+    
+    <!-- App update check strings -->
+    <string name="checking_updates">Checking for updates…</string>
+    <string name="update_available">Update available!</string>
+    <string name="check_update_failed">Check failed. Try again</string>
+    <string name="play_store_not_found">Could not open Play Store</string>
+    <string name="update_in_progress">Update in progress</string>
+
+    <!-- Info Activity strings -->
+    <string name="app_info_content">URL Player Beta is a powerful video player app designed to stream videos from online sources. It supports various stream types like HLS, RTMP, RTSP, and more, allowing you to watch your favorite content seamlessly.\n\nThe app offers a simple and intuitive interface for adding and managing your video channels and playlists.</string>
+    <string name="key_features">Key Features</string>
+    <string name="feature_1">Support for multiple stream formats (HLS, RTMP, RTSP, MP4, etc.)</string>
+    <string name="feature_2">Custom playback controls with advanced options</string>
+    <string name="feature_3">Create and manage playlists easily</string>
+    <string name="feature_4">Picture-in-Picture (PiP) mode for multitasking</string>
+
+    <!-- Bug Report Strings -->
+    <string name="report_bug">Report Bug</string>
+    <string name="bug_report_header">Help us improve the app by reporting any issues you encounter. Please provide as much detail as possible.</string>
+    <string name="bug_title_hint">What\'s the issue?</string>
+    <string name="bug_description_hint">Describe what happened and how to reproduce it</string>
+    <string name="screenshot_optional">Screenshot (optional)</string>
+    <string name="add_screenshot">Add Screenshot</string>
+    <string name="change_screenshot">Change Screenshot</string>
+    <string name="screenshot_preview">Screenshot preview</string>
+    <string name="remove">Remove</string>
+    <string name="device_info">Device Information (automatically included)</string>
+    <string name="submit_bug_report">Submit Bug Report</string>
+    <string name="error_description_required">Please describe the issue</string>
+    <string name="image_load_error">Could not load image</string>
+    <string name="error_sending_report">Error sending report</string>
+    <string name="send_bug_report">Send Bug Report</string>
+    <string name="report_submitted">Report submitted</string>
+    <string name="preparing_report">Preparing your bug report...</string>
+    <string name="no_email_app_found">No email app found on your device</string>
+    <string name="report_details_copied">Report details copied to clipboard</string>
 
 </resources>

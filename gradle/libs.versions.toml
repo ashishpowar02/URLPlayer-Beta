@@ -1,5 +1,5 @@
 [versions]
-agp = "8.9.0"
+agp = "8.9.1"
 kotlin = "2.0.21"
 coreKtx = "1.15.0"
 junit = "4.13.2"
@@ -17,6 +17,7 @@ exoplayerDashVer = "2.16.1"
 constraintlayout = "2.2.0"
 appUpdateKtx = "2.1.0"
 firebaseDatabaseKtx = "21.0.0"
+media3Extractor = "1.6.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -36,6 +37,7 @@ exoplayerUi = {group = "com.google.android.exoplayer", name = "exoplayer-ui", ve
 exoplayerDash = {group = "com.google.android.exoplayer", name = "exoplayer-dash", version.ref = "exoplayerDashVer"}
 app-update-ktx = { group = "com.google.android.play", name = "app-update-ktx", version.ref = "appUpdateKtx" }
 firebase-database-ktx = { group = "com.google.firebase", name = "firebase-database-ktx", version.ref = "firebaseDatabaseKtx" }
+androidx-media3-extractor = { group = "androidx.media3", name = "media3-extractor", version.ref = "media3Extractor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

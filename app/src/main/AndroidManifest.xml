@@ -91,9 +91,17 @@
             android:exported="false"
             android:label="About" />
         <activity
+            android:name=".screen.InfoActivity"
+            android:exported="false"
+            android:label="@string/what_is_app" />
+        <activity
             android:name=".screen.PlaylistActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+        <activity
+            android:name=".screen.BugReportActivity"
+            android:exported="false"
+            android:label="@string/report_bug" />
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.samyak.urlplayerbeta.CastOptionsProvider" />
@@ -102,6 +110,17 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="@string/admob_app_id"/>
+
+        <!-- File Provider for Bug Reports -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 

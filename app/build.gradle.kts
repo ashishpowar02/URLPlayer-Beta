@@ -1,4 +1,3 @@
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -70,6 +69,7 @@ dependencies {
 
     implementation(libs.androidx.constraintlayout)
     implementation(libs.app.update.ktx)
+    implementation(libs.androidx.media3.extractor)
 //    implementation(libs.firebase.database.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -115,4 +115,7 @@ dependencies {
     // Add Cast dependencies
     implementation("com.google.android.gms:play-services-cast-framework:21.4.0")
     implementation("androidx.mediarouter:mediarouter:1.6.0")
+
+    // For parsing Play Store HTML to check for updates
+    implementation("org.jsoup:jsoup:1.16.2")
 }

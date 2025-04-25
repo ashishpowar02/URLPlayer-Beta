@@ -23,6 +23,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.samyak.urlplayerbeta.R
 import android.app.PendingIntent
+import android.view.View
+import android.view.WindowManager
 
 /**
  * Helper class for managing Picture-in-Picture mode in modern Android versions
@@ -71,12 +73,24 @@ class PipHelper(private val activity: Activity) {
         }
     }
     
+    // Check if device is in fullscreen mode
+    private fun isFullscreenMode(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val windowInsets = activity.window.decorView.rootWindowInsets
+            windowInsets?.displayCutout != null || 
+            (activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0
+        } else {
+            (activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0
+        }
+    }
+    
     // Create PiP params with proper aspect ratio and actions
     @RequiresApi(Build.VERSION_CODES.O)
     fun createPipParams(
         videoWidth: Int?,
         videoHeight: Int?,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        videoView: View? = null
     ): PictureInPictureParams {
         val builder = PictureInPictureParams.Builder()
         
@@ -102,8 +116,36 @@ class PipHelper(private val activity: Activity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
                 val sourceRectHint = Rect()
-                activity.window.decorView.getGlobalVisibleRect(sourceRectHint)
-                builder.setSourceRectHint(sourceRectHint)
+                
+                // If we have a specific video view, use its dimensions
+                if (videoView != null && videoView.width > 0 && videoView.height > 0) {
+                    // Get the video view bounds
+                    val locationInWindow = IntArray(2)
+                    videoView.getLocationInWindow(locationInWindow)
+                    
+                    sourceRectHint.set(
+                        locationInWindow[0],
+                        locationInWindow[1],
+                        locationInWindow[0] + videoView.width,
+                        locationInWindow[1] + videoView.height
+                    )
+                } else {
+                    // Use the entire window for fullscreen content
+                    if (isFullscreenMode()) {
+                        // In fullscreen, use the entire screen area
+                        activity.window.decorView.getGlobalVisibleRect(sourceRectHint)
+                    } else {
+                        // For non-fullscreen, get the content area
+                        val contentView = activity.findViewById<View>(android.R.id.content)
+                        contentView.getGlobalVisibleRect(sourceRectHint)
+                    }
+                }
+                
+                // Apply the source rect hint
+                if (!sourceRectHint.isEmpty) {
+                    builder.setSourceRectHint(sourceRectHint)
+                    Log.d(TAG, "SourceRectHint: $sourceRectHint")
+                }
                 
                 // Additional Android 12+ features
                 builder.setSeamlessResizeEnabled(true)
@@ -205,7 +247,12 @@ class PipHelper(private val activity: Activity) {
     }
     
     // Enter PiP mode with proper error handling
-    fun enterPipMode(videoWidth: Int?, videoHeight: Int?, isPlaying: Boolean): Boolean {
+    fun enterPipMode(
+        videoWidth: Int?, 
+        videoHeight: Int?, 
+        isPlaying: Boolean, 
+        videoView: View? = null
+    ): Boolean {
         if (!isPipSupported(activity)) {
             Toast.makeText(activity, "PiP mode not supported on this device", Toast.LENGTH_SHORT).show()
             return false
@@ -213,7 +260,13 @@ class PipHelper(private val activity: Activity) {
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                val params = createPipParams(videoWidth, videoHeight, isPlaying)
+                // For fullscreen mode, prepare the UI first
+                if (isFullscreenMode()) {
+                    // Make sure system UI is visible briefly to improve PiP transition
+                    activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                }
+                
+                val params = createPipParams(videoWidth, videoHeight, isPlaying, videoView)
                 
                 // Ensure we have necessary permissions for Android 13+
                 if (Build.VERSION.SDK_INT >= 33) {
@@ -253,10 +306,15 @@ class PipHelper(private val activity: Activity) {
     
     // Update PiP parameters (e.g., when play/pause state changes)
     @RequiresApi(Build.VERSION_CODES.O)
-    fun updatePipParams(videoWidth: Int?, videoHeight: Int?, isPlaying: Boolean) {
+    fun updatePipParams(
+        videoWidth: Int?, 
+        videoHeight: Int?, 
+        isPlaying: Boolean,
+        videoView: View? = null
+    ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                val params = createPipParams(videoWidth, videoHeight, isPlaying)
+                val params = createPipParams(videoWidth, videoHeight, isPlaying, videoView)
                 activity.setPictureInPictureParams(params)
             } catch (e: Exception) {
                 Log.e(TAG, "Error updating PiP params: ${e.message}")
