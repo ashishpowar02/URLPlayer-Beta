@@ -1,6 +1,9 @@
 package com.samyak.urlplayerbeta.screen
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.samyak.urlplayerbeta.AdManage.loadBannerAd
@@ -19,6 +22,7 @@ class InfoActivity : AppCompatActivity() {
         
         setupToolbar()
         setupAppInfo()
+        setupCoffeeButton()
     }
     
     private fun setupToolbar() {
@@ -40,6 +44,18 @@ class InfoActivity : AppCompatActivity() {
     private fun setupAppInfo() {
         // You can set the app info content here
         binding.appInfoText.text = getString(R.string.app_info_content)
+    }
+    
+    private fun setupCoffeeButton() {
+        binding.coffeeButton.setOnClickListener {
+            val coffeeUrl = getString(R.string.coffee_url)
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(coffeeUrl))
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, getString(R.string.cannot_open_browser), Toast.LENGTH_SHORT).show()
+            }
+        }
     }
     
     override fun onSupportNavigateUp(): Boolean {

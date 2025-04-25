@@ -163,12 +163,39 @@
     <string name="update_in_progress">Update in progress</string>
 
     <!-- Info Activity strings -->
-    <string name="app_info_content">URL Player Beta is a powerful video player app designed to stream videos from online sources. It supports various stream types like HLS, RTMP, RTSP, and more, allowing you to watch your favorite content seamlessly.\n\nThe app offers a simple and intuitive interface for adding and managing your video channels and playlists.</string>
+    <string name="app_info_content">URL Player Beta is a powerful Android application that allows users to play online videos from various streaming sources. The app supports multiple video formats and streaming protocols.\n\n
+<b>Features:</b>\n
+• Play various video formats (HLS, MP4, AVI, MKV, etc.)\n
+• Support for multiple streaming protocols (HTTP, RTMP, RTSP, etc.)\n
+• Custom user agent support\n
+• Save and manage video channels\n
+• Material Design UI with navigation drawer\n
+• Dark theme support\n
+• Picture-in-Picture (PiP) mode with ad-free experience\n
+• Fullscreen mode with notch support\n
+• Audio boost up to 1500% and quality control\n
+• Multiple screen modes (Fit, Fill, Zoom)\n
+• Gesture controls for brightness and volume\n\n
+
+<b>Advanced Live Streaming Features:</b>\n
+• Real-time progress updates with 60fps progress bar\n
+• Zero-delay scrubber movement for real-time tracking\n
+• Red "LIVE" indicator with pulsing animation\n
+• Dynamic time-behind-live display\n
+• One-touch "GO LIVE" button\n
+• Instant seeking with minimal delay\n
+• Automatic quality adaptation\n\n
+
+<b>Supported Formats:</b>\n
+• HLS (.m3u8), MP4, AVI, MKV, M3U, TS, MOV, WebM\n
+• HTTP/HTTPS, RTMP, RTSP, UDP, RTP, MMS, SRT, DASH\n\n
+
+Enjoying URLPlayer Beta? Consider supporting the development by donating. It requires a lot of time and effort to develop this copylefted libre software app.</string>
     <string name="key_features">Key Features</string>
-    <string name="feature_1">Support for multiple stream formats (HLS, RTMP, RTSP, MP4, etc.)</string>
-    <string name="feature_2">Custom playback controls with advanced options</string>
-    <string name="feature_3">Create and manage playlists easily</string>
-    <string name="feature_4">Picture-in-Picture (PiP) mode for multitasking</string>
+    <string name="feature_1">Play various video formats (HLS, MP4, AVI, MKV, etc.)</string>
+    <string name="feature_2">Support for multiple streaming protocols (HTTP, RTMP, RTSP, etc.)</string>
+    <string name="feature_3">PiP mode with ad-free experience and notch support</string>
+    <string name="feature_4">Advanced live streaming with real-time controls</string>
 
     <!-- Bug Report Strings -->
     <string name="report_bug">Report Bug</string>
@@ -190,5 +217,32 @@
     <string name="preparing_report">Preparing your bug report...</string>
     <string name="no_email_app_found">No email app found on your device</string>
     <string name="report_details_copied">Report details copied to clipboard</string>
+
+    <!-- App Rating Dialog -->
+    <string name="rate_us_title">Enjoying URL Player?</string>
+    <string name="rate_us_message">We\'d love to hear your feedback. Please take a moment to rate your experience.</string>
+    <string name="submit">Submit</string>
+    <string name="maybe_later">Maybe Later</string>
+    <string name="never_ask_again">Don\'t ask again</string>
+    <string name="thanks_for_feedback">Thanks for your feedback!</string>
+    <string name="rate_on_play_store">Rate on Play Store</string>
+    <string name="feedback_prompt">Would you like to share more feedback?</string>
+
+    <!-- Feedback Dialog -->
+    <string name="feedback_title">Help us improve!</string>
+    <string name="feedback_subtitle">Please tell us what we can do better</string>
+    <string name="feedback_ui_ux">User Interface/Experience</string>
+    <string name="feedback_performance">App Performance/Stability</string>
+    <string name="feedback_features">Missing or broken features</string>
+    <string name="feedback_ads">Too many ads or issues with ads</string>
+    <string name="feedback_other">Other issues</string>
+    <string name="feedback_details_hint">Tell us more (optional)</string>
+    <string name="send_feedback">Send Feedback</string>
+    <string name="feedback_sent">Thank you for your feedback!</string>
+
+    <!-- Support Developer -->
+    <string name="buy_me_coffee">Buy Me A Coffee</string>
+    <string name="support_developer">Support Development</string>
+    <string name="coffee_url">https://buymeacoffee.com/mr_samyakkamble</string>
 
 </resources>

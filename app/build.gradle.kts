@@ -60,6 +60,10 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
 
+    // Google Play In-App Review API
+    implementation("com.google.android.play:review:2.0.1")
+    implementation("com.google.android.play:review-ktx:2.0.1")
+
     //for exoplayer
     implementation(libs.exoplayerCore)
     implementation(libs.exoplayerUi)

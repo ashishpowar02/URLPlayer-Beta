@@ -2,6 +2,7 @@ package com.samyak.urlplayerbeta.screen
 
 import android.app.Activity
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
@@ -17,6 +18,7 @@ import com.samyak.urlplayerbeta.R
 import com.samyak.urlplayerbeta.adapters.ChannelAdapter
 import com.samyak.urlplayerbeta.databinding.ActivityHomeBinding
 import com.samyak.urlplayerbeta.models.Videos
+import com.samyak.urlplayerbeta.utils.AppRatingManager
 import com.samyak.urlplayerbeta.utils.ChannelItemDecoration
 
 class HomeActivity : AppCompatActivity() {
@@ -24,16 +26,23 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var channelList: MutableList<Videos>
     private lateinit var binding: ActivityHomeBinding
+    private lateinit var sharedPreferences: SharedPreferences
+    private var playbackCount = 0
 
     companion object {
         private const val TAG = "HomeActivity"
         private const val UPDATE_REQUEST_CODE = 100
+        private const val PLAYBACK_COUNT_KEY = "playback_count"
+        private const val PLAYBACK_THRESHOLD = 3  // Show rating after 3 successful playbacks
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityHomeBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        sharedPreferences = getSharedPreferences("app_usage", MODE_PRIVATE)
+        playbackCount = sharedPreferences.getInt(PLAYBACK_COUNT_KEY, 0)
 
         binding.bannerAdContainer.loadBannerAd()
         // Initialize components
@@ -105,6 +114,9 @@ class HomeActivity : AppCompatActivity() {
             } else {
                 startPlayerActivity(video)
             }
+            
+            // Increment playback count and check if we should show rating dialog
+            incrementPlaybackCount()
         })
     }
 
@@ -136,6 +148,22 @@ class HomeActivity : AppCompatActivity() {
             intent.putExtra("URL", video.url)
             intent.putExtra("USER_AGENT", video.userAgent)
             startActivityForResult(intent, UPDATE_REQUEST_CODE)
+        }
+    }
+
+    private fun incrementPlaybackCount() {
+        playbackCount++
+        sharedPreferences.edit().putInt(PLAYBACK_COUNT_KEY, playbackCount).apply()
+        
+        // Check if we've reached threshold to show rating dialog
+        if (playbackCount % PLAYBACK_THRESHOLD == 0) {
+            // Show the Google Play in-app review flow with a slight delay
+            // so it doesn't interrupt the user experience
+            binding.root.postDelayed({
+                if (!isFinishing) {
+                    AppRatingManager.showRatingDialogAfterSignificantEvent(this)
+                }
+            }, 2000) // 2 second delay
         }
     }
 

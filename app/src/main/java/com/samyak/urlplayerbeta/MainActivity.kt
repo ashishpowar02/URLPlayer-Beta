@@ -22,6 +22,7 @@ import com.samyak.urlplayerbeta.utils.AppConstants
 import com.samyak.urlplayerbeta.utils.LanguageManager
 import java.util.Locale
 import android.content.Context
+import com.samyak.urlplayerbeta.utils.AppRatingManager
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -84,6 +85,9 @@ class MainActivity : AppCompatActivity() {
         InAppUpdateManager.init(this, updateResultLauncher)
         InAppUpdateManager.registerListener(installStateUpdatedListener)
 
+        // Track app launch for rating prompts
+        AppRatingManager.trackAppLaunch(this)
+
         binding.bannerAdContainer.loadBannerAd()
         setupToolbar()
         setupClickListeners()
@@ -136,13 +140,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun rateApp() {
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW,
-                Uri.parse("${AppConstants.MARKET_BASE_URL}$packageName")))
-        } catch (e: ActivityNotFoundException) {
-            startActivity(Intent(Intent.ACTION_VIEW,
-                Uri.parse("${AppConstants.PLAY_STORE_BASE_URL}$packageName")))
-        }
+        // Show Google Play's native in-app review flow
+        AppRatingManager.showRatingDialog(this)
     }
 
     private fun shareApp() {
