@@ -357,49 +357,20 @@ class PipHelper(private val activity: Activity) {
             // We'll check PiP state periodically
             val handler = Handler(Looper.getMainLooper())
             
-            var wasInPipMode = false
-            var isFullscreenTransition = false
-            
             val pipCheckRunnable = object : Runnable {
                 override fun run() {
-                    val isInPipNow = activity.isInPictureInPictureMode
-                    
-                    if (wasInPipMode && !isInPipNow) {
-                        // We exited PIP mode
-                        if (activity.isFinishing) {
-                            // Activity is actually closing, call onClose
-                            onClose()
-                        } else {
-                            // This is a transition to fullscreen, we should not close
-                            isFullscreenTransition = true
-                            Log.d(TAG, "PIP → Fullscreen transition detected")
-                            
-                            // Reset the transition flag after a delay
-                            handler.postDelayed({
-                                isFullscreenTransition = false
-                            }, 1500)
-                        }
-                    }
-                    
-                    // If we're in a fullscreen transition, don't close even if conditions match
-                    if (!isInPipNow && !activity.isDestroyed && !activity.isFinishing && !isFullscreenTransition) {
-                        // This is for handling the case where PIP gets closed directly
-                        Log.d(TAG, "PIP closed directly, calling onClose")
+                    if (!activity.isInPictureInPictureMode && !activity.isDestroyed && !activity.isFinishing) {
+                        // PiP mode ended but activity still exists
                         onClose()
-                    }
-                    
-                    // Update our state for next check
-                    wasInPipMode = isInPipNow
-                    
-                    // Continue checking if activity is alive
-                    if (!activity.isDestroyed && !activity.isFinishing) {
-                        handler.postDelayed(this, 500)
+                    } else if (!activity.isDestroyed && !activity.isFinishing) {
+                        // Only schedule next check if activity is still alive
+                        handler.postDelayed(this, 1000)
                     }
                 }
             }
             
             // Start checking
-            handler.postDelayed(pipCheckRunnable, 500)
+            handler.postDelayed(pipCheckRunnable, 1000)
         }
     }
 } 
