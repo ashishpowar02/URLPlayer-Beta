@@ -93,7 +93,6 @@ import android.graphics.drawable.Icon
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import com.samyak.urlplayerbeta.utils.PipHelper
 import android.content.pm.PackageManager
 import android.app.PendingIntent
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
@@ -313,11 +312,6 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
     // Inside the PlayerActivity class, add/update these properties
     private var pipActionsReceiver: BroadcastReceiver? = null
-    private val PIP_CONTROL_TYPE_PLAY = 1
-    private val PIP_CONTROL_TYPE_PAUSE = 2
-    private val PIP_ACTION_PLAY = "play_action"
-    private val PIP_ACTION_PAUSE = "pause_action"
-    // Add these missing constants
     private val REQUEST_CODE_PLAY = 100
     private val REQUEST_CODE_PAUSE = 101
     private val ACTION_PLAY = "com.samyak.urlplayerbeta.ACTION_PLAY"
@@ -325,7 +319,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     private var isPipModeSupported = false
 
     // Inside the PlayerActivity class, add this property
-    private lateinit var pipHelper: PipHelper
+
 
     private lateinit var gestureDetectorCompat: GestureDetectorCompat
     private var minSwipeY: Float = 0f
@@ -396,8 +390,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         // Apply fullscreen mode by default
         playInFullscreen(enable = true)
 
-        // Initialize PipHelper
-        pipHelper = PipHelper(this)
+
     }
 
     private fun handleIntent(intent: Intent) {
@@ -641,8 +634,6 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             e.printStackTrace()
         }
 
-        // Update PiP controls if in PiP mode
-        updatePipControls()
     }
 
     // Update the pauseVideo() method
@@ -665,8 +656,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             e.printStackTrace()
         }
 
-        // Update PiP controls if in PiP mode
-        updatePipControls()
+
     }
 
     // Update the playInFullscreen function
@@ -1493,24 +1483,24 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             } else {
                 // Fix for Android 14+: When PiP is closed (not navigating elsewhere),
                 // we need to release the player to stop audio playback
-                if (Build.VERSION.SDK_INT >= 34) { // Android 14 (UPSIDE_DOWN_CAKE) and above
-                    try {
-                        // Ensure we stop all playback first
-                        if (isPlaying) {
-                            pauseVideo()
-                        }
-                        
-                        // Completely release all player resources
-                        releasePlayerResources()
-                        
-                        // Close the activity to ensure full cleanup
-                        finish()
-                    } catch (e: Exception) {
-                        Log.e("PlayerActivity", "Error cleaning up player on PiP close: ${e.message}")
-                        // Force finish as last resort
-                        finish()
-                    }
-                }
+//                if (Build.VERSION.SDK_INT >= 34) { // Android 14 (UPSIDE_DOWN_CAKE) and above
+//                    try {
+//                        // Ensure we stop all playback first
+//                        if (isPlaying) {
+//                            pauseVideo()
+//                        }
+//
+//                        // Completely release all player resources
+//                        releasePlayerResources()
+//
+//                        // Close the activity to ensure full cleanup
+//                        finish()
+//                    } catch (e: Exception) {
+//                        Log.e("PlayerActivity", "Error cleaning up player on PiP close: ${e.message}")
+//                        // Force finish as last resort
+//                        finish()
+//                    }
+//                }
             }
         }
         
@@ -1610,18 +1600,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         
-        // Only enter PiP mode if eligible
-        if (PipHelper.isPipSupported(this) &&
-            ::player.isInitialized &&
-            !isInPictureInPictureMode &&
-            isPlayerReady) {
-            
-            // Set flag to prevent ads when PiP is requested
-            isPipRequested = true
-            
-            // Enter PiP mode using helper
-            enterPictureInPictureMode()
-        }
+
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -2736,47 +2715,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         }
     }
 
-    // Replace enterPipMode() with this method that uses the standard Android API
-    override fun enterPictureInPictureMode() {
-        try {
-            // Save pre-PiP state
-            prePipScreenMode = currentScreenMode
-            prePipNotchEnabled = isNotchModeEnabled
-            
-            // Set flag to prevent ads when PiP is requested
-            isPipRequested = true
-            
-            // Use PipHelper to enter PiP mode with proper configurations for Android version
-            val videoWidth = player.videoFormat?.width
-            val videoHeight = player.videoFormat?.height
-            
-            if (pipHelper.enterPipMode(videoWidth, videoHeight, isPlaying)) {
-                // Hide controls when entering PiP
-                binding.playerView.hideController()
-                binding.lockButton.visibility = View.GONE
-                binding.brightnessIcon.visibility = View.GONE
-                binding.volumeIcon.visibility = View.GONE
-                
-                // Ensure video is playing
-                playVideo()
-                
-                // For Android 14+, set up periodic check for PiP state changes
-                if (Build.VERSION.SDK_INT >= 34) {
-                    pipHelper.fixPipCloseIssue {
-                        // This will run when PiP is closed without proper callbacks
-                        if (isPlaying) {
-                            pauseVideo()
-                        }
-                        releasePlayerResources()
-                        finish()
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("PlayerActivity", "Error entering PiP mode: ${e.message}")
-            Toast.makeText(this, "PiP mode not available", Toast.LENGTH_SHORT).show()
-        }
-    }
+
 
     // Ultra-fast GO LIVE button click handler for minimal delay
     private fun setupGoLiveButtonClickHandler(goLiveButton: Button) {
@@ -3076,9 +3015,13 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
 
     // Add this method to check if URL is an Akamaized stream
     private fun isAkamaizedStream(url: String?): Boolean {
-        return url?.contains("akamaized", ignoreCase = true) == true &&
-                (url.contains("hdntl=exp", ignoreCase = true) ||
-                        url.contains("hmac=", ignoreCase = true))
+        if (url == null) return false
+        return url.contains("akamaized", ignoreCase = true) ||
+               url.contains("akafms", ignoreCase = true) ||
+               url.contains("akamai", ignoreCase = true) ||
+               url.contains("hdntl=", ignoreCase = true) ||
+               url.contains("hdnts=", ignoreCase = true) ||
+               url.contains("hdnea=", ignoreCase = true)
     }
 
     // Enhanced Disney+ Hotstar cricket live streaming implementation
@@ -3407,53 +3350,115 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
             builder.setAspectRatio(aspectRatio)
         }
         
+        // Enable seamless resize for Android S+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            builder.setSeamlessResizeEnabled(true)
-            // Remove this line as it's unsupported
+            try {
+                builder.setSeamlessResizeEnabled(true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting seamless resize: ${e.message}")
+            }
         }
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Configure auto-enter PiP aspects for newer Android versions
-            try {
-                val playAction = PendingIntent.getBroadcast(
-                    this,
-                    REQUEST_CODE_PLAY,
-                    Intent(ACTION_PLAY),
-                    PendingIntent.FLAG_IMMUTABLE
-                )
-                
-                val pauseAction = PendingIntent.getBroadcast(
-                    this, 
-                    REQUEST_CODE_PAUSE,
-                    Intent(ACTION_PAUSE),
-                    PendingIntent.FLAG_IMMUTABLE
-                )
-                
+        // Configure PiP actions with proper compatibility for all versions
+        try {
+            // On Android TIRAMISU and above, use the newer API for actions
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val actions = mutableListOf<RemoteAction>()
                 
-                // Add play/pause action based on current state
-                if (player?.isPlaying == true) {
-                    actions.add(
-                        RemoteAction(
-                            Icon.createWithResource(this, R.drawable.pause_icon),
-                            "Pause", "Pause",
-                            pauseAction
-                        )
+                // Create play/pause action based on current state
+                val playPauseAction = if (player.isPlaying) {
+                    // Create pause action
+                    val pauseIntent = PendingIntent.getBroadcast(
+                        this,
+                        REQUEST_CODE_PAUSE,
+                        Intent(ACTION_PAUSE).setPackage(packageName),
+                        PendingIntent.FLAG_IMMUTABLE
+                    )
+                    
+                    RemoteAction(
+                        Icon.createWithResource(this, R.drawable.pause_icon),
+                        "Pause", "Pause",
+                        pauseIntent
                     )
                 } else {
-                    actions.add(
-                        RemoteAction(
-                            Icon.createWithResource(this, R.drawable.play_icon),
-                            "Play", "Play",
-                            playAction
-                        )
+                    // Create play action
+                    val playIntent = PendingIntent.getBroadcast(
+                        this,
+                        REQUEST_CODE_PLAY,
+                        Intent(ACTION_PLAY).setPackage(packageName),
+                        PendingIntent.FLAG_IMMUTABLE
+                    )
+                    
+                    RemoteAction(
+                        Icon.createWithResource(this, R.drawable.play_icon),
+                        "Play", "Play",
+                        playIntent
                     )
                 }
                 
+                // Add actions to the list
+                actions.add(playPauseAction)
+                
+                // Set actions to builder
                 builder.setActions(actions)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error setting up PiP actions: ${e.message}")
             }
+            // For Android P to Android 12
+            else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val actions = mutableListOf<RemoteAction>()
+                
+                // Create play/pause action based on current state
+                val playPauseAction = if (player.isPlaying) {
+                    // Create pause action 
+                    val pauseIntent = PendingIntent.getBroadcast(
+                        this,
+                        REQUEST_CODE_PAUSE,
+                        Intent(ACTION_PAUSE).setPackage(packageName),
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    
+                    RemoteAction(
+                        Icon.createWithResource(this, R.drawable.pause_icon),
+                        "Pause", "Pause video",
+                        pauseIntent
+                    )
+                } else {
+                    // Create play action
+                    val playIntent = PendingIntent.getBroadcast(
+                        this,
+                        REQUEST_CODE_PLAY,
+                        Intent(ACTION_PLAY).setPackage(packageName),
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    
+                    RemoteAction(
+                        Icon.createWithResource(this, R.drawable.play_icon),
+                        "Play", "Play video",
+                        playIntent
+                    )
+                }
+                
+                // Add actions to the list
+                actions.add(playPauseAction)
+                
+                // Set actions to builder
+                builder.setActions(actions)
+            }
+            
+            // For Android 14+, ensure we have an auto-enter behavior
+            if (Build.VERSION.SDK_INT >= 34) {
+                try {
+                    // Get source rect for smooth transitions
+                    val sourceRectHint = Rect()
+                    playerView.getGlobalVisibleRect(sourceRectHint)
+                    builder.setSourceRectHint(sourceRectHint)
+                    
+                    // Add more Android 14 specific optimizations here if needed
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error setting Android 14+ PiP params: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting up PiP actions: ${e.message}")
         }
         
         return builder.build()
@@ -3469,22 +3474,31 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 // Create and register new receiver
                 pipActionsReceiver = object : BroadcastReceiver() {
                     override fun onReceive(context: Context, intent: Intent) {
-                        if (intent.action == PIP_ACTION_PLAY) {
-                            playVideo()
-                            updatePipActions()
-                        } else if (intent.action == PIP_ACTION_PAUSE) {
-                            pauseVideo()
-                            updatePipActions()
+                        when (intent.action) {
+                            ACTION_PLAY -> {
+                                playVideo()
+                                updatePipActions()
+                            }
+                            ACTION_PAUSE -> {
+                                pauseVideo()
+                                updatePipActions()
+                            }
                         }
                     }
                 }
                 
-                // Register receiver for both actions
+                // Register receiver for both actions with an explicit intent filter
                 val filter = IntentFilter().apply {
-                    addAction(PIP_ACTION_PLAY)
-                    addAction(PIP_ACTION_PAUSE)
+                    addAction(ACTION_PLAY)
+                    addAction(ACTION_PAUSE)
                 }
-                registerReceiver(pipActionsReceiver, filter)
+                
+                // Register with the correct flags for Android 14+
+                if (Build.VERSION.SDK_INT >= 34) {
+                    registerReceiver(pipActionsReceiver, filter, Context.RECEIVER_EXPORTED)
+                } else {
+                    registerReceiver(pipActionsReceiver, filter)
+                }
             } catch (e: Exception) {
                 Log.e("PlayerActivity", "Error registering PiP receiver: ${e.message}")
             }
@@ -3498,6 +3512,9 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
                 unregisterReceiver(pipActionsReceiver)
                 pipActionsReceiver = null
             }
+        } catch (e: IllegalArgumentException) {
+            // Receiver might not be registered, just log and ignore
+            Log.e("PlayerActivity", "Receiver not registered: ${e.message}")
         } catch (e: Exception) {
             Log.e("PlayerActivity", "Error unregistering PiP receiver: ${e.message}")
         }
@@ -3506,7 +3523,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
     // Update PiP controls when playback state changes
     @RequiresApi(Build.VERSION_CODES.O)
     private fun updatePipActions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && isInPictureInPictureMode) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode) {
             try {
                 val params = createPipParams()
                 setPictureInPictureParams(params)
@@ -3516,18 +3533,7 @@ class PlayerActivity : BaseActivity(), GestureDetector.OnGestureListener {
         }
     }
 
-    // Add this method to update PiP controls when playback state changes
-    private fun updatePipControls() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode) {
-            try {
-                val videoWidth = player.videoFormat?.width
-                val videoHeight = player.videoFormat?.height
-                pipHelper.updatePipParams(videoWidth, videoHeight, isPlaying)
-            } catch (e: Exception) {
-                Log.e("PlayerActivity", "Error updating PiP controls: ${e.message}")
-            }
-        }
-    }
+
 
     // Add special Android 14+ retry method
     private fun retryWithEnhancedAndroid14Headers() {
